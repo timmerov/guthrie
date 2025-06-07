@@ -113,6 +113,12 @@ bool Position::operator < (const Position& other) const
     return (axis_[0] < other.axis_[0]);
 }
 
+/** for sorting **/
+bool Voter::operator < (const Voter& other) const
+{
+    return (position_ < other.position_);
+}
+
 void Electorate::init() noexcept {
     /** allocate space for the voters and candidates **/
     voters_.resize(nvoters_);
@@ -263,6 +269,8 @@ void Electorate::normalize() noexcept {
         normalize(axis, weight);
         weight *= axis_weight_decay_;
     }
+
+    std::sort(voters_.begin(), voters_.end());
 }
 
 /**

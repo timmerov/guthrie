@@ -235,9 +235,9 @@ constexpr int kNVoters = 1000;
 //constexpr int kNVoters = 10*1000;
 
 /** number of candidates **/
-//constexpr int kNCandidates = 3;
+constexpr int kNCandidates = 3;
 //constexpr int kNCandidates = 4;
-constexpr int kNCandidates = 5;
+//constexpr int kNCandidates = 5;
 //constexpr int kNCandidates = 6;
 //constexpr int kNCandidates = 7;
 
@@ -250,8 +250,8 @@ constexpr int kElectorateMethod = kElectorateClusters;
 constexpr int kNClusters = kNCandidates * 2;
 
 /** options for number of issue dimensions (axes). **/
-constexpr int kNAxes = 1;
-//constexpr int kNAxes = 2;
+//constexpr int kNAxes = 1;
+constexpr int kNAxes = 2;
 //constexpr int kNAxes = 3;
 
 /**
@@ -296,6 +296,14 @@ this feature is expensive and not used by the art.
 **/
 //constexpr bool kFindTheoreticalBestCandidate = true;
 constexpr bool kFindTheoreticalBestCandidate = false;
+
+/**
+option to use the median voter and a constructed average voter
+for calculating voter satisfaction.
+this is not recommended.
+**/
+//constexpr bool kUseMedianForSatisfaction = true;
+constexpr bool kUseMedianForSatisfaction = false;
 
 /**
 option to show the electorate distribution.
@@ -451,6 +459,7 @@ public:
             find_best_candidate();
             init_candidates();
             calculate_utilities(actual_);
+            use_median_satisfaction(actual_);
             vote();
             find_winner();
             show_satisfaction();
@@ -512,6 +521,13 @@ public:
             LOG("Issue axes       : "<<electorate_.naxes_);
         } else {
             LOG("Issue axes       : "<<electorate_.naxes_<<" ("<<electorate_.axis_weight_decay_<<")");
+        }
+
+        if (kUseMedianForSatisfaction) {
+            LOG("Note: non-standard satisfaction metric is being shown.");
+            LOG("  The best utility is estimated by the median voter.");
+            LOG("  The worst utility is estimated by one of the extreme voters.");
+            LOG("  The average utility is 90% best and 10% worst.");
         }
     }
 
@@ -769,6 +785,47 @@ public:
         result.which_ = best_candidate;
         result.best_ = best_utility;
         result.average_ = average_utility;
+    }
+
+    /**
+    experimental option for alternative method for calculating voter satisfaction.
+    the idea is to use a definition of best and average candidate that tracks
+    across multiple trials.
+
+    approximate the optimal candidate by the median voter.
+    estimate the worst candidate as the first or last voter.
+    approximate the average candidate as the average of the best and worst.
+    **/
+    void use_median_satisfaction(
+        SatisfactionMetrics& result
+    ) noexcept {
+        if (kUseMedianForSatisfaction == false) {
+            return;
+        }
+
+        /** calculate the utility for the first median last voters. **/
+        int n = electorate_.nvoters_;
+        int left = 0;
+        int mid = n / 2;
+        int right = n - 1;
+        auto& first = electorate_.voters_[left].position_;
+        auto& median = electorate_.voters_[mid].position_;
+        auto& last = electorate_.voters_[right].position_;
+        double first_utility = 0.0;
+        double median_utility = 0.0;
+        double last_utility = 0.0;
+        for (auto&& voter : electorate_.voters_) {
+            first_utility += voter.position_.utility(first);
+            median_utility += voter.position_.utility(median);
+            last_utility += voter.position_.utility(last);
+        }
+
+        /** return the results. **/
+        double worst_utility = std::min(first_utility, last_utility);
+        double average_utility = 0.90 * median_utility + 0.10 * worst_utility;
+        result.best_ = median_utility;
+        result.average_ = average_utility;
+        LOG("=tsc= median sats: "<<first_utility<<" "<<median_utility<<" "<<last_utility<<" "<<average_utility<<" "<<(median_utility-worst_utility));
     }
 
     /**

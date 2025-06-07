@@ -42,6 +42,9 @@ public:
 
     /** position along the axis ranges from 0..1 **/
     Position position_;
+
+    /** for sorting **/
+    bool operator < (const Voter& other) const;
 };
 typedef std::vector<Voter> Voters;
 
