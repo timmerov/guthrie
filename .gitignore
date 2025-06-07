@@ -1,3 +1,4 @@
+bin/
 build-unix64-debug/
 build-unix64-release/
 *.log

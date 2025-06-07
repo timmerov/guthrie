@@ -418,7 +418,8 @@ public:
     double min_satisfaction_ = 1.0;
     int winner_maximizes_satisfaction_ = 0;
     int winner_is_range_ = 0;
-    int winner_is_condorcet_ = 0;
+    int winner_is_condorcet_winner_ = 0;
+    int winner_is_condorcet_loser_ = 0;
     int condorcet_cycles_ = 0;
     int winner_is_borda_ = 0;
     int winner_is_approval_ = 0;
@@ -1171,7 +1172,9 @@ public:
         LOG("Checking voting criteria.");
         int max_satisfaction = find_max_satisfaction_candidate();
         int range = find_range_winner();
-        int condorcet = find_condorcet_winner();
+        int condorcet_winner = -1;
+        int condorcet_loser = -1;
+        find_condorcet_winner(condorcet_winner, condorcet_loser);
         int borda = find_borda_winner();
         int approval = find_approval_winner();
         int ranked = find_ranked_winner();
@@ -1184,8 +1187,11 @@ public:
         if (winner_ == range) {
             ++winner_is_range_;
         }
-        if (winner_ == condorcet) {
-            ++winner_is_condorcet_;
+        if (winner_ == condorcet_winner) {
+            ++winner_is_condorcet_winner_;
+        }
+        if (winner_ == condorcet_loser) {
+            ++winner_is_condorcet_loser_;
         }
         if (winner_ == borda) {
             ++winner_is_borda_;
@@ -1203,9 +1209,38 @@ public:
             ++monotonicity_;
         }
 
-        char condorcet_name = '?';
-        if (condorcet >= 0) {
-            condorcet_name = candidates_[condorcet].name_;
+        char condorcet_winner_name = '?';
+        if (condorcet_winner >= 0) {
+            condorcet_winner_name = candidates_[condorcet_winner].name_;
+        }
+
+        char condorcet_loser_name = '?';
+        if (condorcet_loser >= 0) {
+            condorcet_loser_name = candidates_[condorcet_loser].name_;
+        }
+
+        /**
+        tracking the condorcet loser is a bit tricky.
+        if the winner is not the condorcet lower then result = string(x, x) = pass.
+        **/
+        int loser = -1;
+        /**
+        if (condorcet_loser < 0) ie there is no condorcet loser
+            loser = -1; condorcet_loser = -1;
+            result = string(-1, -1) = n/a.
+        **/
+        /**
+        else if (winner_ == condorcet loser)
+            loser = -1; condorcet_loser = x;
+            result = string(-1, x) = fail.
+        **/
+        /**
+        else if (winner != condorcet_loser)
+            loser = condorcet_loser = x
+            result = string(x, x) = pass
+        **/
+        if (winner_ != condorcet_loser) {
+            loser = condorcet_loser;
         }
 
         LOG("");
@@ -1216,8 +1251,8 @@ public:
         LOG("Maximizes voter satisfaction: "<<candidates_[max_satisfaction].name_<<" "<<result);
         result = result_to_string(winner_, range);
         LOG("Range winner                : "<<candidates_[range].name_<<" "<<result);
-        result = result_to_string(winner_, condorcet);
-        LOG("Condorcet winner            : "<<condorcet_name<<" "<<result);
+        result = result_to_string(winner_, condorcet_winner);
+        LOG("Condorcet winner            : "<<condorcet_winner_name<<" "<<result);
         result = result_to_string(winner_, borda);
         LOG("Borda winner                : "<<candidates_[borda].name_<<" "<<result);
         result = result_to_string(winner_, approval);
@@ -1226,6 +1261,8 @@ public:
         LOG("Ranked choice winner (IRV)  : "<<candidates_[ranked].name_<<" "<<result);
         result = result_to_string(winner_, plurality);
         LOG("Plurality winner            : "<<candidates_[plurality].name_<<" "<<result);
+        result = result_to_string(loser, condorcet_loser);
+        LOG("Condorcet loser             : "<<condorcet_loser_name<<" "<<result);
         result = result_to_string(winner_, monotonicity);
         LOG("Monotonicity                : "<<candidates_[monotonicity].name_<<" "<<result);
     }
@@ -1312,7 +1349,10 @@ public:
     /**
     condorcet wins the most head to head races.
     **/
-    int find_condorcet_winner() noexcept {
+    void find_condorcet_winner(
+        int& winner_out,
+        int& loser_out
+    ) noexcept {
         /** initialize number of wins for each candidate. **/
         std::vector<int> wins;
         wins.resize(ncandidates_);
@@ -1337,8 +1377,9 @@ public:
         find the average utility while we're here.
         **/
         int max = -1;
-        int winner = 0;
+        int winner = -1;
         int nwinners = 0;
+        int loser = -1;
         double total_utility = 0.0;
         for (int i = 0; i < ncandidates_; ++i) {
             int w = wins[i];
@@ -1356,6 +1397,9 @@ public:
             if (sum_it) {
                 total_utility += candidates_[i].utility_;
             }
+            if (w == 0) {
+                loser = i;
+            }
         }
 
         /** no winner if there's a cycle. **/
@@ -1372,7 +1416,9 @@ public:
         double utility = total_utility / double(nwinners);
         total_satisfaction_condorcet_ += calculate_satisfaction(utility, actual_);
 
-        return winner;
+        /** return results. **/
+        winner_out = winner;
+        loser_out = loser;
     }
 
     /**
@@ -1773,12 +1819,13 @@ public:
         double satisfaction_plurality = total_satisfaction_plurality_ / denom;
         double maximizes_satisfaction = 100.0 * double(winner_maximizes_satisfaction_) / denom;
         double is_range = 100.0 * double(winner_is_range_) / denom;
-        double is_condorcet_min = 100.0 * double(winner_is_condorcet_) / denom;
-        double is_condorcet_max = 100.0 * double(winner_is_condorcet_) / non_cycle_trials;
+        double is_condorcet_min = 100.0 * double(winner_is_condorcet_winner_) / denom;
+        double is_condorcet_max = 100.0 * double(winner_is_condorcet_winner_) / non_cycle_trials;
         double is_borda = 100.0 * double(winner_is_borda_) / denom;
         double is_approval = 100.0 * double(winner_is_approval_) / denom;
         double is_ranked = 100.0 * double(winner_is_ranked_) / denom;
         double is_plurality = 100.0 * double(winner_is_plurality_) / denom;
+        double is_condorcet_loser = 100.0 * double(winner_is_condorcet_loser_) / denom;
         double monotonicity = 100.0 * double(monotonicity_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
@@ -1803,6 +1850,7 @@ public:
         LOG("Agrees with approval          : "<<is_approval<<"%");
         LOG("Agrees with ranked            : "<<is_ranked<<"%");
         LOG("Agrees with plurality         : "<<is_plurality<<"%");
+        LOG("Is Condorcet loser            : "<<is_condorcet_loser<<"%");
         LOG("Monotonicity                  : "<<monotonicity<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
         LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
