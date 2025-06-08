@@ -372,8 +372,6 @@ public:
 };
 typedef std::vector<Candidate> Candidates;
 
-typedef std::vector<int> Approvals;
-
 class Bloc {
 public:
     /** voters in this bloc. **/
@@ -381,9 +379,6 @@ public:
 
     /** distances to candidates in ranked order. **/
     Utilities utilities_;
-
-    /** total approvals of voters in the bloc. **/
-    Approvals approvals_;
 };
 
 typedef std::map<Rankings, Bloc> BlocMap;
@@ -847,16 +842,13 @@ public:
         bloc_map_.clear();
         Rankings rankings;
         Utilities utilities;
-        Approvals approvals;
         int n = candidates_.size();
 
         for (auto&& voter : electorate_.voters_) {
             rankings.reserve(n);
             utilities.reserve(n);
-            approvals.reserve(n);
             rankings.clear();
             utilities.clear();
-            approvals.resize(n);
 
             /** create the rankings and the utility. **/
             for (int i = 0; i < n; ++i) {
@@ -872,20 +864,6 @@ public:
                 utilities.insert(utilities.begin() + k, utility);
             }
 
-            /** approve of above average candidates. **/
-            double sum = 0.0;
-            for (int i = 0; i < n; ++i) {
-                approvals[i] = 0;
-                sum += utilities[i];
-            }
-            double avg = sum / double(n);
-            for (int i = 0; i < n; ++i) {
-                if (utilities[i] < avg) {
-                    break;
-                }
-                approvals[i] = 1;
-            }
-
             /** find the key. **/
             auto it = bloc_map_.find(rankings);
             if (it == bloc_map_.end()) {
@@ -893,7 +871,6 @@ public:
                 Bloc bloc;
                 bloc.size_ = 1;
                 bloc.utilities_ = std::move(utilities);
-                bloc.approvals_ = std::move(approvals);
                 bloc_map_.insert({std::move(rankings), std::move(bloc)});
             } else {
                 /** add to the existing bloc. **/
@@ -901,7 +878,6 @@ public:
                 ++found_bloc.size_;
                 for (int i = 0; i < n; ++i) {
                     found_bloc.utilities_[i] += utilities[i];
-                    found_bloc.approvals_[i] += approvals[i];
                 }
             }
         }
@@ -917,7 +893,6 @@ public:
     ) noexcept {
         Rankings new_rankings;
         Utilities new_utilities;
-        Approvals new_approvals;
         BlocMap new_bloc_map;
 
         int n = candidates_.size();
@@ -928,10 +903,8 @@ public:
 
             new_rankings.reserve(n);
             new_utilities.reserve(n);
-            new_approvals.reserve(n);
             new_rankings.clear();
             new_utilities.clear();
-            new_approvals.clear();
 
             /**
             copy the old rankings and utilities
@@ -948,7 +921,6 @@ public:
                     continue;
                 }
                 double u = bloc.utilities_[i];
-                int a = bloc.approvals_[i];
                 int new_r = r;
                 if (new_r > k) {
                     /** later candidates change index. **/
@@ -956,7 +928,6 @@ public:
                 }
                 new_rankings.push_back(new_r);
                 new_utilities.push_back(u);
-                new_approvals.push_back(a);
             }
 
             /** find the new rankings in the map. **/
@@ -966,7 +937,6 @@ public:
                 Bloc new_bloc;
                 new_bloc.size_ = bloc.size_;
                 new_bloc.utilities_ = std::move(new_utilities);
-                new_bloc.approvals_ = std::move(new_approvals);
                 new_bloc_map.insert({std::move(new_rankings), std::move(new_bloc)});
             } else {
                 /** accumulate into an existing bloc. **/
@@ -974,7 +944,6 @@ public:
                 found_bloc.size_ += bloc.size_;
                 for (int i = 0; i < n; ++i) {
                     found_bloc.utilities_[i] += new_utilities[i];
-                    found_bloc.approvals_[i] += new_approvals[i];
                 }
             }
         }
@@ -999,10 +968,6 @@ public:
             ss<<" size: "<<bloc.size_<<" utilities:";
             for (int i = 0; i < nrankings; ++i) {
                 ss<<" "<<bloc.utilities_[i];
-            }
-            ss<<" approvals:";
-            for (int i = 0; i < nrankings; ++i) {
-                ss<<" "<<bloc.approvals_[i];
             }
             LOG(ss.str());
         }
@@ -1548,7 +1513,12 @@ public:
     }
 
     /**
-    use the approvals stored when the bloc was created.
+    hack and slash this.
+    the bloc either approves or not.
+    in reality the bloc is divided.
+    but we don't know how unless we do the N*M thing again.
+
+    =tsc= todo: do approval correctly.
     **/
     int find_approval_winner() noexcept {
         /** initialize number of approvals for each candidate. **/
@@ -1562,10 +1532,16 @@ public:
         for (auto&& it : bloc_map_) {
             auto& rankings = it.first;
             auto& bloc = it.second;
+            double first = bloc.utilities_[0];
+            double last = bloc.utilities_[ncandidates_-1];
+            double mid = (first + last) / 2.0;
 
             for (int i = 0; i < ncandidates_; ++i) {
-                int which = rankings[i];
-                approvals[which] += bloc.approvals_[i];
+                double utility = bloc.utilities_[i];
+                if (utility > mid) {
+                    int which = rankings[i];
+                    approvals[which] += bloc.size_;
+                }
             }
         }
 
@@ -1884,7 +1860,7 @@ public:
         LOG("Agrees with approval          : "<<is_approval<<"%");
         LOG("Agrees with ranked            : "<<is_ranked<<"%");
         LOG("Agrees with plurality         : "<<is_plurality<<"%");
-        LOG("Condorcet loser wins          : "<<is_condorcet_loser<<"%");
+        LOG("Is Condorcet loser            : "<<is_condorcet_loser<<"%");
         LOG("Monotonicity                  : "<<monotonicity<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
         LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
