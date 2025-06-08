@@ -1580,8 +1580,18 @@ public:
             }
         }
 
-        /** accumulate the satisfaction. **/
+        /**
+        what does approval do when there is no majority winner?
+        we use the plurality winner.
+        log it. ship it.
+        **/
         auto& candidate = candidates_[winner];
+        if (2*max <= electorate_.nvoters_) {
+            int majority = (electorate_.nvoters_ + 1) / 2;
+            LOG(candidate.name_<<" has a plurality ("<<max<<") but not a majority ("<<majority<<") of approval votes.");
+        }
+
+        /** accumulate the satisfaction. **/
         double sat = calculate_satisfaction(candidate.utility_, actual_);
         total_satisfaction_approval_ += sat;
 
