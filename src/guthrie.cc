@@ -235,9 +235,9 @@ constexpr int kNVoters = 1000;
 //constexpr int kNVoters = 10*1000;
 
 /** number of candidates **/
-constexpr int kNCandidates = 3;
+//constexpr int kNCandidates = 3;
 //constexpr int kNCandidates = 4;
-//constexpr int kNCandidates = 5;
+constexpr int kNCandidates = 5;
 //constexpr int kNCandidates = 6;
 //constexpr int kNCandidates = 7;
 
@@ -288,7 +288,17 @@ constexpr double kPrimaryPower = 0.4;
 
 /** option to use a fixed seed for testing. **/
 constexpr std::uint64_t kSeedChoice = 0;
-//constexpr std::uint64_t kSeedChoice = 1749001466860975755;
+//constexpr std::uint64_t kSeedChoice = 1749416347205323736;
+
+/**
+option to use approval votes to find guthrie winner.
+this seems like it should work well.
+but it actually increases the opportunities for strategic voting
+that lowers total voter satisfaction.
+this is not recommended.
+**/
+constexpr bool kUseApprovalVotes = false;
+//constexpr bool kUseApprovalVotes = true;
 
 /**
 option to find the theoretical best candidate from the voters.
@@ -372,6 +382,8 @@ public:
 };
 typedef std::vector<Candidate> Candidates;
 
+typedef std::vector<int> Approvals;
+
 class Bloc {
 public:
     /** voters in this bloc. **/
@@ -379,6 +391,10 @@ public:
 
     /** distances to candidates in ranked order. **/
     Utilities utilities_;
+
+    /** total approvals of voters in the bloc. **/
+    int napprovals_ = 0;
+    Approvals approvals_;
 };
 
 typedef std::map<Rankings, Bloc> BlocMap;
@@ -399,6 +415,7 @@ public:
     Electorate electorate_;
     Candidates candidates_;
     BlocMap bloc_map_;
+    int total_support_ = 0;
 
     /** results from the trial. **/
     int winner_ = 0;
@@ -522,6 +539,10 @@ public:
             LOG("Issue axes       : "<<electorate_.naxes_);
         } else {
             LOG("Issue axes       : "<<electorate_.naxes_<<" ("<<electorate_.axis_weight_decay_<<")");
+        }
+
+        if (kUseApprovalVotes) {
+            LOG("Note: Guthrie winner is found using approval votes instead of single vote.");
         }
 
         if (kUseMedianForSatisfaction) {
@@ -670,6 +691,9 @@ public:
             candidates_.erase(candidates_.begin() + worst);
             reduce_blocs(worst);
         }
+
+        /** repeat for correct approvals. sigh. **/
+        create_blocs();
     }
 
     void name_candidates() noexcept {
@@ -842,13 +866,17 @@ public:
         bloc_map_.clear();
         Rankings rankings;
         Utilities utilities;
+        Approvals approvals;
         int n = candidates_.size();
+        int total_support = 0;
 
         for (auto&& voter : electorate_.voters_) {
             rankings.reserve(n);
             utilities.reserve(n);
+            approvals.reserve(n);
             rankings.clear();
             utilities.clear();
+            approvals.resize(n);
 
             /** create the rankings and the utility. **/
             for (int i = 0; i < n; ++i) {
@@ -864,6 +892,23 @@ public:
                 utilities.insert(utilities.begin() + k, utility);
             }
 
+            /** approve of above average candidates. **/
+            double sum = 0.0;
+            int napprovals = 0;
+            for (int i = 0; i < n; ++i) {
+                approvals[i] = 0;
+                sum += utilities[i];
+            }
+            double avg = sum / double(n);
+            for (int i = 0; i < n; ++i) {
+                if (utilities[i] < avg) {
+                    break;
+                }
+                approvals[i] = 1;
+                ++napprovals;
+            }
+            total_support += napprovals;
+
             /** find the key. **/
             auto it = bloc_map_.find(rankings);
             if (it == bloc_map_.end()) {
@@ -871,15 +916,28 @@ public:
                 Bloc bloc;
                 bloc.size_ = 1;
                 bloc.utilities_ = std::move(utilities);
+                bloc.napprovals_ = napprovals;
+                bloc.approvals_ = std::move(approvals);
                 bloc_map_.insert({std::move(rankings), std::move(bloc)});
             } else {
                 /** add to the existing bloc. **/
-                auto& found_bloc = it->second;
-                ++found_bloc.size_;
+                auto& found = it->second;
+                found.size_ += 1;
+                found.napprovals_ += napprovals;
                 for (int i = 0; i < n; ++i) {
-                    found_bloc.utilities_[i] += utilities[i];
+                    found.utilities_[i] += utilities[i];
+                    found.approvals_[i] += approvals[i];
                 }
             }
+        }
+
+        /** save the total support for find winner. **/
+        if (kUseApprovalVotes == false) {
+            /** voters vote for a single candidate. **/
+            total_support_ = electorate_.nvoters_;
+        } else {
+            /** voters may approve multiple candidates. **/
+            total_support_ = total_support;
         }
     }
 
@@ -887,12 +945,15 @@ public:
     the k-th candidate has been removed.
     recreate the blocs without him.
     recreate the new keys and the new utilities.
+
+    ignore approvals cause we don't have the information we need to update it.
     **/
     void reduce_blocs(
         int k
     ) noexcept {
         Rankings new_rankings;
         Utilities new_utilities;
+        Approvals new_approvals;
         BlocMap new_bloc_map;
 
         int n = candidates_.size();
@@ -903,8 +964,10 @@ public:
 
             new_rankings.reserve(n);
             new_utilities.reserve(n);
+            new_approvals.reserve(n);
             new_rankings.clear();
             new_utilities.clear();
+            new_approvals.resize(n);
 
             /**
             copy the old rankings and utilities
@@ -933,18 +996,28 @@ public:
             /** find the new rankings in the map. **/
             auto rit = new_bloc_map.find(new_rankings);
             if (rit == new_bloc_map.end()) {
+                /** must have approvals. **/
+                new_approvals[0] = bloc.size_;
+                for (int i = 1; i < n; ++i) {
+                    new_approvals[i] = 0;
+                }
+
                 /** add a new bloc. **/
                 Bloc new_bloc;
                 new_bloc.size_ = bloc.size_;
                 new_bloc.utilities_ = std::move(new_utilities);
+                new_bloc.napprovals_ = bloc.size_;
+                new_bloc.approvals_ = std::move(new_approvals);
                 new_bloc_map.insert({std::move(new_rankings), std::move(new_bloc)});
             } else {
                 /** accumulate into an existing bloc. **/
-                auto& found_bloc = rit->second;
-                found_bloc.size_ += bloc.size_;
+                auto& found = rit->second;
+                found.size_ += bloc.size_;
+                found.napprovals_ += bloc.size_;
                 for (int i = 0; i < n; ++i) {
-                    found_bloc.utilities_[i] += new_utilities[i];
+                    found.utilities_[i] += new_utilities[i];
                 }
+                found.approvals_[0] += bloc.size_;
             }
         }
 
@@ -969,6 +1042,10 @@ public:
             for (int i = 0; i < nrankings; ++i) {
                 ss<<" "<<bloc.utilities_[i];
             }
+            ss<<" n: "<<bloc.napprovals_<<" approvals:";
+            for (int i = 0; i < nrankings; ++i) {
+                ss<<" "<<bloc.approvals_[i];
+            }
             LOG(ss.str());
         }
     }
@@ -989,8 +1066,18 @@ public:
         for (auto&& it : bloc_map_) {
             auto& rankings = it.first;
             auto& bloc = it.second;
-            int favorite = rankings[0];
-            candidates_[favorite].support_ += bloc.size_;
+
+            if (kUseApprovalVotes == false) {
+                /** voters vote for a single candidate. **/
+                int which = rankings[0];
+                candidates_[which].support_ += bloc.size_;
+            } else {
+                /** voters may approve multiple candidates. **/
+                for (int i = 0; i < ncandidates_; ++i) {
+                    int which = rankings[i];
+                    candidates_[which].support_ += bloc.approvals_[i];
+                }
+            }
         }
     }
 
@@ -1043,7 +1130,7 @@ public:
 
             /** check for majority. **/
             for (int i = 0; i < ncandidates_; ++i) {
-                if (2*counts[i] > electorate_.nvoters_) {
+                if (2*counts[i] > total_support_) {
                     winner_ = i;
                     if (show_required) {
                         auto& candidate = candidates_[i];
@@ -1513,12 +1600,7 @@ public:
     }
 
     /**
-    hack and slash this.
-    the bloc either approves or not.
-    in reality the bloc is divided.
-    but we don't know how unless we do the N*M thing again.
-
-    =tsc= todo: do approval correctly.
+    use the approvals stored when the bloc was created.
     **/
     int find_approval_winner() noexcept {
         /** initialize number of approvals for each candidate. **/
@@ -1532,16 +1614,10 @@ public:
         for (auto&& it : bloc_map_) {
             auto& rankings = it.first;
             auto& bloc = it.second;
-            double first = bloc.utilities_[0];
-            double last = bloc.utilities_[ncandidates_-1];
-            double mid = (first + last) / 2.0;
 
             for (int i = 0; i < ncandidates_; ++i) {
-                double utility = bloc.utilities_[i];
-                if (utility > mid) {
-                    int which = rankings[i];
-                    approvals[which] += bloc.size_;
-                }
+                int which = rankings[i];
+                approvals[which] += bloc.approvals_[i];
             }
         }
 
@@ -1860,7 +1936,7 @@ public:
         LOG("Agrees with approval          : "<<is_approval<<"%");
         LOG("Agrees with ranked            : "<<is_ranked<<"%");
         LOG("Agrees with plurality         : "<<is_plurality<<"%");
-        LOG("Is Condorcet loser            : "<<is_condorcet_loser<<"%");
+        LOG("Condorcet loser wins          : "<<is_condorcet_loser<<"%");
         LOG("Monotonicity                  : "<<monotonicity<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
         LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
