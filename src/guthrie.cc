@@ -23,7 +23,7 @@ they can score and order the other candidates.
 9. the winning candidate should maximize total satisfaction (utility) of the voters.
 10. voters know how all the candidates score/rank each other.
 11. candidates should not be harmed by getting more votes from voters.
-monoticity and participation criteria.
+independence of irrelevant alternatives and participation criteria.
 
 
 guthrie voting works like this:
@@ -151,10 +151,14 @@ so they can't really be averaged meaningfully.
 could try using the worst possible candidate as the baseline.
 could try using the median voter/candidate as the baseline.
 
-we do not need check monotonicity when multiple candidates drop out,
-proof by induction.
-we assume we already verified we have monotonicity for N-1 candidates.
-we don't need to do that work again.
+we do not need check independence when multiple candidates drop out.
+guthrie does not have satisfy independence from irrelevant alternatives.
+the occurance is rare.
+but is an opportunity for voters to vote strategically.
+specifically B wins.
+candidate A prefers B.
+but a majority of A's voters prefer C.
+if A drops out, or equivalently A's voters defect to C, C may win by majority.
 
 where there are many candidates...
 and they form a condorcet ordering...
@@ -188,7 +192,7 @@ handle ties.
 check if the winner is the condorcet winner if there is one.
 report satisfaction (two different ways) and bayer regret.
 find the voter that would be the optimal candidate.
-check for monotonicity ie the winner should still win if any other candidate drops out.
+check for independence ie the winner should still win if any other candidate drops out.
 check if the most satisfactory candidate wins.
 they don't. but that's okay.
 these are diabolical cases that no voting system can do better. except maybe range voting.
@@ -424,7 +428,7 @@ public:
 
     /** summary **/
     double total_satisfaction_ = 0.0;
-    double total_satisfaction_monotonicity_ = 0.0;
+    double total_satisfaction_independence_ = 0.0;
     double total_satisfaction_range_ = 0.0;
     double total_satisfaction_condorcet_ = 0.0;
     double total_satisfaction_borda_ = 0.0;
@@ -442,7 +446,7 @@ public:
     int winner_is_approval_ = 0;
     int winner_is_ranked_ = 0;
     int winner_is_plurality_ = 0;
-    int monotonicity_ = 0;
+    int independence_ = 0;
 
     void run() noexcept {
         /** initialize the random number generators. **/
@@ -1266,7 +1270,7 @@ public:
         int approval = find_approval_winner();
         int ranked = find_ranked_winner();
         int plurality = find_plurality_winner();
-        int monotonicity = check_monotonicity();
+        int independence = check_independence();
 
         if (winner_ == max_satisfaction) {
             ++winner_maximizes_satisfaction_;
@@ -1292,8 +1296,8 @@ public:
         if (winner_ == plurality) {
             ++winner_is_plurality_;
         }
-        if (winner_ == monotonicity) {
-            ++monotonicity_;
+        if (winner_ == independence) {
+            ++independence_;
         }
 
         char condorcet_winner_name = '?';
@@ -1350,8 +1354,8 @@ public:
         LOG("Plurality winner            : "<<candidates_[plurality].name_<<" "<<result);
         result = result_to_string(loser, condorcet_loser);
         LOG("Condorcet loser             : "<<condorcet_loser_name<<" "<<result);
-        result = result_to_string(winner_, monotonicity);
-        LOG("Monotonicity                : "<<candidates_[monotonicity].name_<<" "<<result);
+        result = result_to_string(winner_, independence);
+        LOG("Independence                : "<<candidates_[independence].name_<<" "<<result);
     }
 
     const char *result_to_string(int winner, int expected) noexcept {
@@ -1809,9 +1813,9 @@ public:
         return winner;
     }
 
-    int check_monotonicity() noexcept {
+    int check_independence() noexcept {
         /** assume we pass. **/
-        int monotonicity = winner_;
+        int independence = winner_;
 
         /** save the original winner **/
         int original_winner = winner_;
@@ -1847,7 +1851,7 @@ public:
                 auto& candidate = candidates_[winner_];
                 char winner_name = candidate.name_;
                 if (winner_name != original_winner_name) {
-                    monotonicity = i;
+                    independence = i;
                     LOG(winner_name<<" wins if "<<original_candidates[i].name_<<" doesn't run.");
                     ++nwinners;
                     total_utility += candidate.utility_;
@@ -1880,9 +1884,9 @@ public:
             utility = total_utility / double(nwinners);
         }
         double sat = calculate_satisfaction(utility, actual_);
-        total_satisfaction_monotonicity_ += sat;
+        total_satisfaction_independence_ += sat;
 
-        return monotonicity;
+        return independence;
     }
 
     void show_summary() noexcept {
@@ -1896,7 +1900,7 @@ public:
         double min_satisfaction = min_satisfaction_;
         double regret = 1.0 - satisfaction;
         double max_regret = 1.0 - min_satisfaction;
-        double satisfaction_monotonicity = total_satisfaction_monotonicity_ / denom;
+        double satisfaction_independence = total_satisfaction_independence_ / denom;
         double satisfaction_range = total_satisfaction_range_/ denom;
         double satisfaction_condorcet = total_satisfaction_condorcet_/ denom;
         double satisfaction_borda = total_satisfaction_borda_/ denom;
@@ -1912,7 +1916,7 @@ public:
         double is_ranked = 100.0 * double(winner_is_ranked_) / denom;
         double is_plurality = 100.0 * double(winner_is_plurality_) / denom;
         double is_condorcet_loser = 100.0 * double(winner_is_condorcet_loser_) / denom;
-        double monotonicity = 100.0 * double(monotonicity_) / denom;
+        double independence = 100.0 * double(independence_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
 
@@ -1922,7 +1926,7 @@ public:
         LOG("Summary:");
         LOG("Voter satisfaction (min)      : "<<satisfaction<<" ("<<min_satisfaction<<")");
         LOG("Voter regret (max)            : "<<regret<<" ("<<max_regret<<")");
-        LOG("Voter satisfaction (strategic): "<<satisfaction_monotonicity);
+        LOG("Voter satisfaction (strategic): "<<satisfaction_independence);
         LOG("Voter satisfaction range      : "<<satisfaction_range);
         LOG("Voter satisfaction condorcet  : "<<satisfaction_condorcet);
         LOG("Voter satisfaction borda      : "<<satisfaction_borda);
@@ -1937,7 +1941,7 @@ public:
         LOG("Agrees with ranked            : "<<is_ranked<<"%");
         LOG("Agrees with plurality         : "<<is_plurality<<"%");
         LOG("Condorcet loser wins          : "<<is_condorcet_loser<<"%");
-        LOG("Monotonicity                  : "<<monotonicity<<"%");
+        LOG("Independence                  : "<<independence<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
         LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
     }
