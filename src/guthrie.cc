@@ -292,7 +292,7 @@ constexpr double kPrimaryPower = 0.4;
 
 /** option to use a fixed seed for testing. **/
 constexpr std::uint64_t kSeedChoice = 0;
-//constexpr std::uint64_t kSeedChoice = 1749416347205323736;
+//constexpr std::uint64_t kSeedChoice = 1749440727065077936;
 
 /**
 option to use approval votes to find guthrie winner.
@@ -435,6 +435,7 @@ public:
     double total_satisfaction_approval_ = 0.0;
     double total_satisfaction_ranked_ = 0.0;
     double total_satisfaction_plurality_ = 0.0;
+    double total_satisfaction_utility_ = 0.0;
     int majority_winners_ = 0;
     double min_satisfaction_ = 1.0;
     int winner_maximizes_satisfaction_ = 0;
@@ -446,6 +447,7 @@ public:
     int winner_is_approval_ = 0;
     int winner_is_ranked_ = 0;
     int winner_is_plurality_ = 0;
+    int winner_is_utility_ = 0;
     int independence_ = 0;
 
     void run() noexcept {
@@ -1270,6 +1272,9 @@ public:
         int approval = find_approval_winner();
         int ranked = find_ranked_winner();
         int plurality = find_plurality_winner();
+        int utility = find_utility_winner();
+
+        /** caution: this destroys the bloc map. **/
         int independence = check_independence();
 
         if (winner_ == max_satisfaction) {
@@ -1295,6 +1300,9 @@ public:
         }
         if (winner_ == plurality) {
             ++winner_is_plurality_;
+        }
+        if (winner_ == utility) {
+            ++winner_is_utility_;
         }
         if (winner_ == independence) {
             ++independence_;
@@ -1352,6 +1360,8 @@ public:
         LOG("Ranked choice winner (IRV)  : "<<candidates_[ranked].name_<<" "<<result);
         result = result_to_string(winner_, plurality);
         LOG("Plurality winner            : "<<candidates_[plurality].name_<<" "<<result);
+        result = result_to_string(winner_, utility);
+        LOG("Maximizes candidate utility : "<<candidates_[utility].name_<<" "<<result);
         result = result_to_string(loser, condorcet_loser);
         LOG("Condorcet loser             : "<<condorcet_loser_name<<" "<<result);
         result = result_to_string(winner_, independence);
@@ -1768,7 +1778,7 @@ public:
     }
 
     /**
-    calledfind the plurality winner.
+    find the plurality winner.
     **/
     int find_plurality_winner() noexcept {
         std::vector<int> counts;
@@ -1809,6 +1819,40 @@ public:
         if (2*votes > electorate_.nvoters_) {
             ++majority_winners_;
         }
+
+        return winner;
+    }
+
+    /**
+    check if the winning candidate maximizes the total
+    satisfaction of all candidates.
+    not voters.
+    **/
+    int find_utility_winner() noexcept {
+
+        int winner = -1;
+        double max = -1e99;
+
+        for (int i = 0; i < ncandidates_; ++i) {
+            auto& a = candidates_[i];
+            double utility = 0.0;
+            for (int k = 0; k < ncandidates_; ++k) {
+                if (k == i) {
+                    continue;
+                }
+                auto& b = candidates_[k];
+                utility += a.position_.utility(b.position_);
+            }
+            if (utility > max) {
+                winner = i;
+                max = utility;
+            }
+        }
+
+        /** accumulate the satisfaction. **/
+        auto& candidate = candidates_[winner];
+        double sat = calculate_satisfaction(candidate.utility_, actual_);
+        total_satisfaction_utility_ += sat;
 
         return winner;
     }
@@ -1907,6 +1951,7 @@ public:
         double satisfaction_approval = total_satisfaction_approval_/ denom;
         double satisfaction_ranked = total_satisfaction_ranked_/ denom;
         double satisfaction_plurality = total_satisfaction_plurality_ / denom;
+        double satisfaction_utility = total_satisfaction_utility_ / denom;
         double maximizes_satisfaction = 100.0 * double(winner_maximizes_satisfaction_) / denom;
         double is_range = 100.0 * double(winner_is_range_) / denom;
         double is_condorcet_min = 100.0 * double(winner_is_condorcet_winner_) / denom;
@@ -1915,6 +1960,7 @@ public:
         double is_approval = 100.0 * double(winner_is_approval_) / denom;
         double is_ranked = 100.0 * double(winner_is_ranked_) / denom;
         double is_plurality = 100.0 * double(winner_is_plurality_) / denom;
+        double is_utility = 100.0 * double(winner_is_utility_) / denom;
         double is_condorcet_loser = 100.0 * double(winner_is_condorcet_loser_) / denom;
         double independence = 100.0 * double(independence_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
@@ -1933,6 +1979,7 @@ public:
         LOG("Voter satisfaction approval   : "<<satisfaction_approval);
         LOG("Voter satisfaction ranked     : "<<satisfaction_ranked);
         LOG("Voter satisfaction plurality  : "<<satisfaction_plurality);
+        LOG("Candidate satisfaction        : "<<satisfaction_utility);
         LOG("Maximizes voter satisfaction  : "<<maximizes_satisfaction<<"%");
         LOG("Agrees with range             : "<<is_range<<"%");
         LOG("Agrees with condorcet         : "<<is_condorcet_min<<"% "<<is_condorcet_max<<"%");
@@ -1940,6 +1987,7 @@ public:
         LOG("Agrees with approval          : "<<is_approval<<"%");
         LOG("Agrees with ranked            : "<<is_ranked<<"%");
         LOG("Agrees with plurality         : "<<is_plurality<<"%");
+        LOG("Maxes candidate satisfaction  : "<<is_utility<<"%");
         LOG("Condorcet loser wins          : "<<is_condorcet_loser<<"%");
         LOG("Independence                  : "<<independence<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
