@@ -436,6 +436,7 @@ public:
     double total_satisfaction_ranked_ = 0.0;
     double total_satisfaction_plurality_ = 0.0;
     double total_satisfaction_utility_ = 0.0;
+    double total_satisfaction_ordering_ = 0.0;
     int majority_winners_ = 0;
     double min_satisfaction_ = 1.0;
     int winner_maximizes_satisfaction_ = 0;
@@ -443,6 +444,7 @@ public:
     int winner_is_condorcet_winner_ = 0;
     int winner_is_condorcet_loser_ = 0;
     int condorcet_cycles_ = 0;
+    int condorcet_orderings_ = 0;
     int winner_is_borda_ = 0;
     int winner_is_approval_ = 0;
     int winner_is_ranked_ = 0;
@@ -1456,6 +1458,7 @@ public:
     ) noexcept {
         /** initialize number of wins for each candidate. **/
         std::vector<int> wins;
+        wins.reserve(ncandidates_);
         wins.resize(ncandidates_);
         for (int i = 0; i < ncandidates_; ++i) {
             wins[i] = 0;
@@ -1472,6 +1475,9 @@ public:
                 ++wins[result.winner_];
             }
         }
+
+        /** test for condorcet ordering. **/
+        std::uint64_t counts = 0;
 
         /**
         find the candidate with the most wins.
@@ -1501,6 +1507,9 @@ public:
             if (w == 0) {
                 loser = i;
             }
+
+            /** set bit for condorcet ordering. **/
+            counts |= 1 << w;
         }
 
         /** no winner if there's a cycle. **/
@@ -1508,6 +1517,15 @@ public:
             LOG("Condorcet cycle exists.");
             winner = -1;
             ++condorcet_cycles_;
+        }
+
+        /** check if there is a condorcet ordering. **/
+        std::uint64_t check = (1 << ncandidates_) - 1;
+        if (counts == check) {
+            LOG("Condorcet ordering exists.");
+            ++condorcet_orderings_;
+            auto& candidate = candidates_[winner_];
+            total_satisfaction_ordering_ += calculate_satisfaction(candidate.utility_, actual_);
         }
 
         /**
@@ -1952,6 +1970,7 @@ public:
         double satisfaction_ranked = total_satisfaction_ranked_/ denom;
         double satisfaction_plurality = total_satisfaction_plurality_ / denom;
         double satisfaction_utility = total_satisfaction_utility_ / denom;
+        double satisfaction_ordering = total_satisfaction_ordering_ / double(condorcet_orderings_);
         double maximizes_satisfaction = 100.0 * double(winner_maximizes_satisfaction_) / denom;
         double is_range = 100.0 * double(winner_is_range_) / denom;
         double is_condorcet_min = 100.0 * double(winner_is_condorcet_winner_) / denom;
@@ -1965,6 +1984,7 @@ public:
         double independence = 100.0 * double(independence_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
+        double condorcet_orderings = 100.0 * double(condorcet_orderings_) / denom;
 
         LOG("");
         show_header();
@@ -1992,6 +2012,8 @@ public:
         LOG("Independence                  : "<<independence<<"%");
         LOG("Won by majority               : "<<majority_winners<<"%");
         LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
+        LOG("Condorcet orderings           : "<<condorcet_orderings<<"%");
+        LOG("Ordering satisfaction         : "<<satisfaction_ordering);
     }
 };
 
