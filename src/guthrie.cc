@@ -185,7 +185,6 @@ qed.
 the interesting cases are when there are condorcet cycles.
 which require two or more uncorrelated axes for the issues.
 
-
 things done:
 
 handle ties.
@@ -204,6 +203,19 @@ multiple issue dimensions,
 things to do:
 
 non-linear utility or piece-wise linear utility,
+
+voting systems to consider adding:
+
+majority judgement voting - winner has the largest median utility.
+bucklin voting - while no largest majority, accumulate next highest votes.
+anti-plurality - winner has fewest last place votes.
+two round system - top 2 pluralities go head to head.
+
+other voting systems worth mentioning:
+smith methods - condorcet completion.
+maximal lotteries - condorcet completion.
+non-smith condorcet.
+star - score the automatic runoff top two.
 **/
 
 #include "electorate.h"
