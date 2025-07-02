@@ -215,7 +215,8 @@ other voting systems worth mentioning:
 smith methods - condorcet completion.
 maximal lotteries - condorcet completion.
 non-smith condorcet.
-star - score the automatic runoff top two.
+star - range plus automatic runoff of the top two.
+cumulative voting - split 1.0 votes among candidates.
 **/
 
 #include "electorate.h"
@@ -252,8 +253,8 @@ constexpr int kNVoters = 1000;
 
 /** number of candidates **/
 //constexpr int kNCandidates = 3;
-//constexpr int kNCandidates = 4;
-constexpr int kNCandidates = 5;
+constexpr int kNCandidates = 4;
+//constexpr int kNCandidates = 5;
 //constexpr int kNCandidates = 6;
 //constexpr int kNCandidates = 7;
 
@@ -445,7 +446,8 @@ public:
     double total_satisfaction_condorcet_ = 0.0;
     double total_satisfaction_borda_ = 0.0;
     double total_satisfaction_approval_ = 0.0;
-    double total_satisfaction_ranked_ = 0.0;
+    double total_satisfaction_anti_plurality_ = 0.0;
+    double total_satisfaction_instant_ = 0.0;
     double total_satisfaction_plurality_ = 0.0;
     double total_satisfaction_utility_ = 0.0;
     double total_satisfaction_ordering_ = 0.0;
@@ -459,7 +461,8 @@ public:
     int condorcet_orderings_ = 0;
     int winner_is_borda_ = 0;
     int winner_is_approval_ = 0;
-    int winner_is_ranked_ = 0;
+    int winner_is_anti_plurality_ = 0;
+    int winner_is_instant_ = 0;
     int winner_is_plurality_ = 0;
     int winner_is_utility_ = 0;
     int independence_ = 0;
@@ -1284,7 +1287,8 @@ public:
         find_condorcet_winner(condorcet_winner, condorcet_loser);
         int borda = find_borda_winner();
         int approval = find_approval_winner();
-        int ranked = find_ranked_winner();
+        int anti_plurality = find_anti_plurality_winner();
+        int instant = find_instant_winner();
         int plurality = find_plurality_winner();
         int utility = find_utility_winner();
 
@@ -1309,8 +1313,11 @@ public:
         if (winner_ == approval) {
             ++winner_is_approval_;
         }
-        if (winner_ == ranked) {
-            ++winner_is_ranked_;
+        if (winner_ == anti_plurality) {
+            ++winner_is_anti_plurality_;
+        }
+        if (winner_ == instant) {
+            ++winner_is_instant_;
         }
         if (winner_ == plurality) {
             ++winner_is_plurality_;
@@ -1370,8 +1377,10 @@ public:
         LOG("Borda winner                : "<<candidates_[borda].name_<<" "<<result);
         result = result_to_string(winner_, approval);
         LOG("Approval winner             : "<<candidates_[approval].name_<<" "<<result);
-        result = result_to_string(winner_, ranked);
-        LOG("Ranked choice winner (IRV)  : "<<candidates_[ranked].name_<<" "<<result);
+        result = result_to_string(winner_, anti_plurality);
+        LOG("Anti-plurality winner       : "<<candidates_[anti_plurality].name_<<" "<<result);
+        result = result_to_string(winner_, instant);
+        LOG("Instant runoff winner       : "<<candidates_[instant].name_<<" "<<result);
         result = result_to_string(winner_, plurality);
         LOG("Plurality winner            : "<<candidates_[plurality].name_<<" "<<result);
         result = result_to_string(winner_, utility);
@@ -1702,10 +1711,10 @@ public:
     typedef std::vector<RankedChoice> RankedChoices;
 
     /**
-    ranked choice voting.
+    instant runoff voting.
     **/
-    int find_ranked_winner() noexcept {
-        int ranked_winner = -1;
+    int find_instant_winner() noexcept {
+        int instant_winner = -1;
 
         /** copy the voter blocs. **/
         int nblocs = bloc_map_.size();
@@ -1769,7 +1778,7 @@ public:
 
             /** check for a majority winner. **/
             if (2*max > electorate_.nvoters_) {
-                ranked_winner = winner;
+                instant_winner = winner;
                 break;
             }
 
@@ -1795,16 +1804,16 @@ public:
             }
         }
 
-        if (ranked_winner < 0) {
+        if (instant_winner < 0) {
             LOG("=tsc= uh oh! irv failed to find winner." );
         }
 
         /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[ranked_winner];
+        auto& candidate = candidates_[instant_winner];
         double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_ranked_ += sat;
+        total_satisfaction_instant_ += sat;
 
-        return ranked_winner;
+        return instant_winner;
     }
 
     /**
@@ -1849,6 +1858,48 @@ public:
         if (2*votes > electorate_.nvoters_) {
             ++majority_winners_;
         }
+
+        return winner;
+    }
+
+    /**
+    find the anti-plurality winner.
+    **/
+    int find_anti_plurality_winner() noexcept {
+        std::vector<int> counts;
+        counts.reserve(ncandidates_);
+        counts.resize(ncandidates_);
+
+        /** clear the counts. **/
+        for (int i = 0; i < ncandidates_; ++i) {
+            counts[i] = 0;
+        }
+
+        /** sum the votes. **/
+        int pos = ncandidates_ - 1;
+        for (auto&& it : bloc_map_) {
+            auto& rankings = it.first;
+            auto& bloc = it.second;
+
+            int last = rankings[pos];
+            counts[last] += bloc.size_;
+        }
+
+        /** find the winner. **/
+        int winner = 0;
+        int votes = 0x7FFFFFFF;
+        for (int i = 0; i < ncandidates_; ++i) {
+            int count = counts[i];
+            if (count <= votes) {
+                winner = i;
+                votes = count;
+            }
+        }
+
+        /** accumulate the satisfaction. **/
+        auto& candidate = candidates_[winner];
+        double sat = calculate_satisfaction(candidate.utility_, actual_);
+        total_satisfaction_anti_plurality_ += sat;
 
         return winner;
     }
@@ -1979,7 +2030,8 @@ public:
         double satisfaction_condorcet = total_satisfaction_condorcet_/ denom;
         double satisfaction_borda = total_satisfaction_borda_/ denom;
         double satisfaction_approval = total_satisfaction_approval_/ denom;
-        double satisfaction_ranked = total_satisfaction_ranked_/ denom;
+        double satisfaction_anti_plurality = total_satisfaction_anti_plurality_ / denom;
+        double satisfaction_instant = total_satisfaction_instant_/ denom;
         double satisfaction_plurality = total_satisfaction_plurality_ / denom;
         double satisfaction_utility = total_satisfaction_utility_ / denom;
         double satisfaction_ordering = total_satisfaction_ordering_ / double(condorcet_orderings_);
@@ -1989,7 +2041,8 @@ public:
         double is_condorcet_max = 100.0 * double(winner_is_condorcet_winner_) / non_cycle_trials;
         double is_borda = 100.0 * double(winner_is_borda_) / denom;
         double is_approval = 100.0 * double(winner_is_approval_) / denom;
-        double is_ranked = 100.0 * double(winner_is_ranked_) / denom;
+        double is_anti_plurality = 100.0 * double(winner_is_anti_plurality_) / denom;
+        double is_instant = 100.0 * double(winner_is_instant_) / denom;
         double is_plurality = 100.0 * double(winner_is_plurality_) / denom;
         double is_utility = 100.0 * double(winner_is_utility_) / denom;
         double is_condorcet_loser = 100.0 * double(winner_is_condorcet_loser_) / denom;
@@ -2002,30 +2055,32 @@ public:
         show_header();
         LOG("");
         LOG("Summary:");
-        LOG("Voter satisfaction (min)      : "<<satisfaction<<" ("<<min_satisfaction<<")");
-        LOG("Voter regret (max)            : "<<regret<<" ("<<max_regret<<")");
-        LOG("Voter satisfaction (strategic): "<<satisfaction_independence);
-        LOG("Voter satisfaction range      : "<<satisfaction_range);
-        LOG("Voter satisfaction condorcet  : "<<satisfaction_condorcet);
-        LOG("Voter satisfaction borda      : "<<satisfaction_borda);
-        LOG("Voter satisfaction approval   : "<<satisfaction_approval);
-        LOG("Voter satisfaction ranked     : "<<satisfaction_ranked);
-        LOG("Voter satisfaction plurality  : "<<satisfaction_plurality);
-        LOG("Candidate satisfaction        : "<<satisfaction_utility);
-        LOG("Maximizes voter satisfaction  : "<<maximizes_satisfaction<<"%");
-        LOG("Agrees with range             : "<<is_range<<"%");
-        LOG("Agrees with condorcet         : "<<is_condorcet_min<<"% "<<is_condorcet_max<<"%");
-        LOG("Agrees with borda             : "<<is_borda<<"%");
-        LOG("Agrees with approval          : "<<is_approval<<"%");
-        LOG("Agrees with ranked            : "<<is_ranked<<"%");
-        LOG("Agrees with plurality         : "<<is_plurality<<"%");
-        LOG("Maxes candidate satisfaction  : "<<is_utility<<"%");
-        LOG("Condorcet loser wins          : "<<is_condorcet_loser<<"%");
-        LOG("Independence                  : "<<independence<<"%");
-        LOG("Won by majority               : "<<majority_winners<<"%");
-        LOG("Condorcet cycles              : "<<condorcet_cycles<<"%");
-        LOG("Condorcet orderings           : "<<condorcet_orderings<<"%");
-        LOG("Ordering satisfaction         : "<<satisfaction_ordering);
+        LOG("Voter satisfaction (min)         : "<<satisfaction<<" ("<<min_satisfaction<<")");
+        LOG("Voter regret (max)               : "<<regret<<" ("<<max_regret<<")");
+        LOG("Voter satisfaction (strategic)   : "<<satisfaction_independence);
+        LOG("Voter satisfaction range         : "<<satisfaction_range);
+        LOG("Voter satisfaction condorcet     : "<<satisfaction_condorcet);
+        LOG("Voter satisfaction borda         : "<<satisfaction_borda);
+        LOG("Voter satisfaction approval      : "<<satisfaction_approval);
+        LOG("Voter satisfaction anti-plurality: "<<satisfaction_anti_plurality);
+        LOG("Voter satisfaction instant       : "<<satisfaction_instant);
+        LOG("Voter satisfaction plurality     : "<<satisfaction_plurality);
+        LOG("Candidate satisfaction           : "<<satisfaction_utility);
+        LOG("Maximizes voter satisfaction     : "<<maximizes_satisfaction<<"%");
+        LOG("Agrees with range                : "<<is_range<<"%");
+        LOG("Agrees with condorcet            : "<<is_condorcet_min<<"% "<<is_condorcet_max<<"%");
+        LOG("Agrees with borda                : "<<is_borda<<"%");
+        LOG("Agrees with approval             : "<<is_approval<<"%");
+        LOG("Agrees with anti-plurality       : "<<is_anti_plurality<<"%");
+        LOG("Agrees with instant              : "<<is_instant<<"%");
+        LOG("Agrees with plurality            : "<<is_plurality<<"%");
+        LOG("Maxes candidate satisfaction     : "<<is_utility<<"%");
+        LOG("Condorcet loser wins             : "<<is_condorcet_loser<<"%");
+        LOG("Independence                     : "<<independence<<"%");
+        LOG("Won by majority                  : "<<majority_winners<<"%");
+        LOG("Condorcet cycles                 : "<<condorcet_cycles<<"%");
+        LOG("Condorcet orderings              : "<<condorcet_orderings<<"%");
+        LOG("Ordering satisfaction            : "<<satisfaction_ordering);
     }
 };
 
