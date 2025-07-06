@@ -433,10 +433,29 @@ public:
 
     void find_winner(bool quiet = kQuiet) noexcept;
 };
+/**
+to do:
+Bucklin
+MajorityJudgement
+*/
 class Guthrie {};
 class Range {};
+class Condorcet {};
+class Borda {};
+class Approval {};
+class AntiPlurality {};
+class InstantRunoff {};
+class Plurality {};
+class Utility {};
 template<> void ElectoralMethod<Guthrie>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<Range>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Condorcet>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Borda>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Approval>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<AntiPlurality>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<InstantRunoff>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Plurality>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Utility>::find_winner(bool quiet) noexcept;
 
 class GuthrieImpl {
 public:
@@ -463,31 +482,25 @@ public:
     /** analyzed electoral methods. **/
     ElectoralMethod<Guthrie> guthrie_;
     ElectoralMethod<Range> range_;
+    ElectoralMethod<Condorcet> condorcet_;
+    ElectoralMethod<Borda> borda_;
+    ElectoralMethod<Approval> approval_;
+    ElectoralMethod<AntiPlurality> anti_plurality_;
+    ElectoralMethod<InstantRunoff> instant_runoff_;
+    ElectoralMethod<Plurality> plurality_;
+    ElectoralMethod<Utility> utility_;
 
     /** summary **/
     double total_satisfaction_ = 0.0;
     double total_satisfaction_independence_ = 0.0;
-    double total_satisfaction_condorcet_ = 0.0;
-    double total_satisfaction_borda_ = 0.0;
-    double total_satisfaction_approval_ = 0.0;
-    double total_satisfaction_anti_plurality_ = 0.0;
-    double total_satisfaction_instant_ = 0.0;
-    double total_satisfaction_plurality_ = 0.0;
-    double total_satisfaction_utility_ = 0.0;
     double total_satisfaction_ordering_ = 0.0;
     int majority_winners_ = 0;
     double min_satisfaction_ = 1.0;
     int winner_maximizes_satisfaction_ = 0;
-    int winner_is_condorcet_winner_ = 0;
-    int winner_is_condorcet_loser_ = 0;
+    int condorcet_loser_ = 0;
+    int condorcet_is_loser_ = 0;
     int condorcet_cycles_ = 0;
     int condorcet_orderings_ = 0;
-    int winner_is_borda_ = 0;
-    int winner_is_approval_ = 0;
-    int winner_is_anti_plurality_ = 0;
-    int winner_is_instant_ = 0;
-    int winner_is_plurality_ = 0;
-    int winner_is_utility_ = 0;
     int independence_ = 0;
 
     void run() noexcept {
@@ -1180,15 +1193,13 @@ public:
         LOG("Checking voting criteria.");
         int max_satisfaction = find_max_satisfaction_candidate();
         range_.find_winner();
-        int condorcet_winner = -1;
-        int condorcet_loser = -1;
-        find_condorcet_winner(condorcet_winner, condorcet_loser);
-        int borda = find_borda_winner();
-        int approval = find_approval_winner();
-        int anti_plurality = find_anti_plurality_winner();
-        int instant = find_instant_winner();
-        int plurality = find_plurality_winner();
-        int utility = find_utility_winner();
+        condorcet_.find_winner();
+        borda_.find_winner();
+        approval_.find_winner();
+        anti_plurality_.find_winner();
+        instant_runoff_.find_winner();
+        plurality_.find_winner();
+        utility_.find_winner();
 
         /** caution: this destroys the bloc map. **/
         int independence = check_independence();
@@ -1199,42 +1210,42 @@ public:
         if (guthrie_.winner_ == range_.winner_) {
             ++range_.is_winner_;
         }
-        if (guthrie_.winner_ == condorcet_winner) {
-            ++winner_is_condorcet_winner_;
+        if (guthrie_.winner_ == condorcet_.winner_) {
+            ++condorcet_.is_winner_;
         }
-        if (guthrie_.winner_ == condorcet_loser) {
-            ++winner_is_condorcet_loser_;
+        if (guthrie_.winner_ == condorcet_loser_) {
+            ++condorcet_is_loser_;
         }
-        if (guthrie_.winner_ == borda) {
-            ++winner_is_borda_;
+        if (guthrie_.winner_ == borda_.winner_) {
+            ++borda_.is_winner_;
         }
-        if (guthrie_.winner_ == approval) {
-            ++winner_is_approval_;
+        if (guthrie_.winner_ == approval_.winner_) {
+            ++approval_.is_winner_;
         }
-        if (guthrie_.winner_ == anti_plurality) {
-            ++winner_is_anti_plurality_;
+        if (guthrie_.winner_ == anti_plurality_.winner_) {
+            ++anti_plurality_.is_winner_;
         }
-        if (guthrie_.winner_ == instant) {
-            ++winner_is_instant_;
+        if (guthrie_.winner_ == instant_runoff_.winner_) {
+            ++instant_runoff_.is_winner_;
         }
-        if (guthrie_.winner_ == plurality) {
-            ++winner_is_plurality_;
+        if (guthrie_.winner_ == plurality_.winner_) {
+            ++plurality_.is_winner_;
         }
-        if (guthrie_.winner_ == utility) {
-            ++winner_is_utility_;
+        if (guthrie_.winner_ == utility_.winner_) {
+            ++utility_.is_winner_;
         }
         if (guthrie_.winner_ == independence) {
             ++independence_;
         }
 
         char condorcet_winner_name = '?';
-        if (condorcet_winner >= 0) {
-            condorcet_winner_name = candidates_[condorcet_winner].name_;
+        if (condorcet_.winner_ >= 0) {
+            condorcet_winner_name = candidates_[condorcet_.winner_].name_;
         }
 
         char condorcet_loser_name = '?';
-        if (condorcet_loser >= 0) {
-            condorcet_loser_name = candidates_[condorcet_loser].name_;
+        if (condorcet_loser_ >= 0) {
+            condorcet_loser_name = candidates_[condorcet_loser_].name_;
         }
 
         /**
@@ -1257,8 +1268,8 @@ public:
             loser = condorcet_loser = x
             result = string(x, x) = pass
         **/
-        if (guthrie_.winner_ != condorcet_loser) {
-            loser = condorcet_loser;
+        if (guthrie_.winner_ != condorcet_loser_) {
+            loser = condorcet_loser_;
         }
 
         LOG("");
@@ -1269,21 +1280,21 @@ public:
         LOG("Maximizes voter satisfaction: "<<candidates_[max_satisfaction].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, range_.winner_);
         LOG("Range winner                : "<<candidates_[range_.winner_].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, condorcet_winner);
+        result = result_to_string(guthrie_.winner_, condorcet_.winner_);
         LOG("Condorcet winner            : "<<condorcet_winner_name<<" "<<result);
-        result = result_to_string(guthrie_.winner_, borda);
-        LOG("Borda winner                : "<<candidates_[borda].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, approval);
-        LOG("Approval winner             : "<<candidates_[approval].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, anti_plurality);
-        LOG("Anti-plurality winner       : "<<candidates_[anti_plurality].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, instant);
-        LOG("Instant runoff winner       : "<<candidates_[instant].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, plurality);
-        LOG("Plurality winner            : "<<candidates_[plurality].name_<<" "<<result);
-        result = result_to_string(guthrie_.winner_, utility);
-        LOG("Maximizes candidate utility : "<<candidates_[utility].name_<<" "<<result);
-        result = result_to_string(loser, condorcet_loser);
+        result = result_to_string(guthrie_.winner_, borda_.winner_);
+        LOG("Borda winner                : "<<candidates_[borda_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, approval_.winner_);
+        LOG("Approval winner             : "<<candidates_[approval_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, anti_plurality_.winner_);
+        LOG("Anti-plurality winner       : "<<candidates_[anti_plurality_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, instant_runoff_.winner_);
+        LOG("Instant runoff winner       : "<<candidates_[instant_runoff_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, plurality_.winner_);
+        LOG("Plurality winner            : "<<candidates_[plurality_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, utility_.winner_);
+        LOG("Maximizes candidate utility : "<<candidates_[utility_.winner_].name_<<" "<<result);
+        result = result_to_string(loser, condorcet_loser_);
         LOG("Condorcet loser             : "<<condorcet_loser_name<<" "<<result);
         result = result_to_string(guthrie_.winner_, independence);
         LOG("Independence                : "<<candidates_[independence].name_<<" "<<result);
@@ -1312,482 +1323,6 @@ public:
         min_satisfaction_ = std::min(min_satisfaction_, satisfaction);
 
         return satisfaction_winner;
-    }
-
-    class HeadToHead {
-    public:
-        int winner_ = 0;
-        int loser_ = 0;
-        int winner_votes_ = 0;
-        int loser_votes_ = 0;
-    };
-
-    /**
-    condorcet wins the most head to head races.
-    **/
-    void find_condorcet_winner(
-        int& winner_out,
-        int& loser_out
-    ) noexcept {
-        /** initialize number of wins for each candidate. **/
-        std::vector<int> wins;
-        wins.reserve(ncandidates_);
-        wins.resize(ncandidates_);
-        for (int i = 0; i < ncandidates_; ++i) {
-            wins[i] = 0;
-        }
-
-        LOG("Condorcet results:");
-        /** count head to head victories. **/
-        for (int i = 0; i < ncandidates_; ++i) {
-            for (int k = i + 1; k < ncandidates_; ++k) {
-                HeadToHead result;
-                head_to_head(i, k, result);
-                LOG(" "<<candidates_[result.winner_].name_<<" ("<<result.winner_votes_<<") > "
-                    <<candidates_[result.loser_].name_<<" ("<<result.loser_votes_<<")");
-                ++wins[result.winner_];
-            }
-        }
-
-        /** test for condorcet ordering. **/
-        std::uint64_t counts = 0;
-
-        /**
-        find the candidate with the most wins.
-        find the average utility while we're here.
-        **/
-        int max = -1;
-        int winner = -1;
-        int nwinners = 0;
-        int loser = -1;
-        double total_utility = 0.0;
-        for (int i = 0; i < ncandidates_; ++i) {
-            int w = wins[i];
-            bool sum_it = false;
-            if (max == w) {
-                ++nwinners;
-                sum_it = true;
-            } else if (max < w) {
-                winner = i;
-                nwinners = 1;
-                max = w;
-                total_utility = 0;
-                sum_it = true;
-            }
-            if (sum_it) {
-                total_utility += candidates_[i].utility_;
-            }
-            if (w == 0) {
-                loser = i;
-            }
-
-            /** set bit for condorcet ordering. **/
-            counts |= 1 << w;
-        }
-
-        /** no winner if there's a cycle. **/
-        if (nwinners > 1) {
-            LOG("Condorcet cycle exists.");
-            winner = -1;
-            ++condorcet_cycles_;
-        }
-
-        /** check if there is a condorcet ordering. **/
-        std::uint64_t check = (1 << ncandidates_) - 1;
-        if (counts == check) {
-            LOG("Condorcet ordering exists.");
-            ++condorcet_orderings_;
-            auto& candidate = candidates_[guthrie_.winner_];
-            total_satisfaction_ordering_ += calculate_satisfaction(candidate.utility_, actual_);
-        }
-
-        /**
-        average the utility for all candidates in the cycle if any.
-        accumulate for the summary.
-        **/
-        double utility = total_utility / double(nwinners);
-        total_satisfaction_condorcet_ += calculate_satisfaction(utility, actual_);
-
-        /** return results. **/
-        winner_out = winner;
-        loser_out = loser;
-    }
-
-    /**
-    return true if candidate a will beat candidate b
-    in a head to head matchup.
-    **/
-    void head_to_head(
-        int a,
-        int b,
-        HeadToHead &result
-    ) noexcept {
-        /** init vote counts. **/
-        int avotes = 0;
-        int bvotes = 0;
-
-        /** for each voter bloc. **/
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            /** give the votes to whichever is first. */
-            for (auto&& which : rankings) {
-                if (which == a) {
-                    avotes += bloc.size_;
-                    break;
-                }
-                if (which == b) {
-                    bvotes += bloc.size_;
-                    break;
-                }
-            }
-        }
-
-        /**
-        we assume that a comes before b in the candidate list.
-        and that we're looking for a winner.
-        in which case, by the rules, a wins ties.
-        **/
-        if (avotes >= bvotes) {
-            result.winner_ = a;
-            result.loser_ = b;
-            result.winner_votes_ = avotes;
-            result.loser_votes_ = bvotes;
-        } else {
-            result.winner_ = b;
-            result.loser_ = a;
-            result.winner_votes_ = bvotes;
-            result.loser_votes_ = avotes;
-        }
-    }
-
-    /**
-    borda count 0 for first, 1 for second, ...
-    lowest total wins.
-    **/
-    int find_borda_winner() noexcept {
-        /** initialize number of wins for each candidate. **/
-        std::vector<int> counts;
-        counts.resize(ncandidates_);
-        for (int i = 0; i < ncandidates_; ++i) {
-            counts[i] = 0;
-        }
-
-        /** for each voter bloc. **/
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            for (int i = 0; i < ncandidates_; ++i) {
-                int which = rankings[i];
-                counts[which] += i * bloc.size_;
-            }
-        }
-
-        /** find the lowest count. **/
-        int winner = 0;
-        int min = 0x7FFFFFFF;
-        for (int i = 0; i < ncandidates_; ++i) {
-            int count = counts[i];
-            if (min > count ) {
-                winner = i;
-                min = count;
-            }
-        }
-
-        /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[winner];
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_borda_ += sat;
-
-        return winner;
-    }
-
-    /**
-    use the approvals stored when the bloc was created.
-    **/
-    int find_approval_winner() noexcept {
-        /** initialize number of approvals for each candidate. **/
-        std::vector<int> approvals;
-        approvals.resize(ncandidates_);
-        for (int i = 0; i < ncandidates_; ++i) {
-            approvals[i] = 0;
-        }
-
-        /** for each voter bloc. **/
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            for (int i = 0; i < ncandidates_; ++i) {
-                int which = rankings[i];
-                approvals[which] += bloc.approvals_[i];
-            }
-        }
-
-        /** find the largest approval. **/
-        int winner = 0;
-        int max = -1;
-        for (int i = 0; i < ncandidates_; ++i) {
-            int approval = approvals[i];
-            if (max < approval ) {
-                winner = i;
-                max = approval;
-            }
-        }
-
-        /**
-        what does approval do when there is no majority winner?
-        we use the plurality winner.
-        log it. ship it.
-        **/
-        auto& candidate = candidates_[winner];
-        if (2*max <= electorate_.nvoters_) {
-            int majority = (electorate_.nvoters_ + 1) / 2;
-            LOG(candidate.name_<<" has a plurality ("<<max<<") but not a majority ("<<majority<<") of approval votes.");
-        }
-
-        /** accumulate the satisfaction. **/
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_approval_ += sat;
-
-        return winner;
-    }
-
-    class RankedChoice {
-    public:
-        Rankings rankings_;
-        int size_;
-    };
-    typedef std::vector<RankedChoice> RankedChoices;
-
-    /**
-    instant runoff voting.
-    **/
-    int find_instant_winner() noexcept {
-        int instant_winner = -1;
-
-        /** copy the voter blocs. **/
-        int nblocs = bloc_map_.size();
-        RankedChoices ranked_choices;
-        ranked_choices.reserve(nblocs);
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            RankedChoice ranked_choice;
-            ranked_choice.rankings_ = rankings;
-            ranked_choice.size_ = bloc.size_;
-            ranked_choices.push_back(std::move(ranked_choice));
-        }
-
-        /** allocate vote counts. **/
-        std::vector<int> counts;
-        counts.reserve(ncandidates_);
-        counts.resize(ncandidates_);
-
-        /** initialize a list of elligible candidates. **/
-        std::vector<int> candidates;
-        candidates.reserve(ncandidates_);
-        candidates.resize(ncandidates_);
-        for (int i = 0; i < ncandidates_; ++i) {
-            candidates[i] = i;
-        }
-
-        /** repeat until we have a winner. **/
-        for (int ncandidates = ncandidates_; ncandidates > 0; --ncandidates) {
-            /** clear the vote counts. **/
-            for (int i = 0; i < ncandidates_; ++i) {
-                counts[i] = 0;
-            }
-
-            /** count the first place votes. **/
-            for (auto&& rc : ranked_choices) {
-                int which = rc.rankings_[0];
-                counts[which] += rc.size_;
-            }
-
-            /** find the candidates with the most and least first place votes. **/
-            int winner = -1;
-            int loser = -1;
-            int max = -1;
-            int min = 0x7FFFFFFF;
-            for (int i = 0; i < ncandidates; ++i) {
-                int which = candidates[i];
-                int count = counts[which];
-                /** by rule, first in the list wins ties. **/
-                if (max < count) {
-                    winner = which;
-                    max = count;
-                }
-                /** by rule, last in the list loses ties. **/
-                if (min >= count) {
-                    loser = which;
-                    min = count;
-                }
-            }
-
-            /** check for a majority winner. **/
-            if (2*max > electorate_.nvoters_) {
-                instant_winner = winner;
-                break;
-            }
-
-            /** remove the loser from the rankings. **/
-            for (auto&& rc : ranked_choices) {
-                auto& rankings = rc.rankings_;
-                for (int i = 0; i < ncandidates; ++i) {
-                    int which = rankings[i];
-                    if (which == loser) {
-                        rankings.erase(rankings.begin() + i);
-                        break;
-                    }
-                }
-            }
-
-            /** remove the loser from the candidate list. **/
-            for (int i = 0; i < ncandidates; ++i) {
-                int which = candidates[i];
-                if (which == loser) {
-                    candidates.erase(candidates.begin() + i);
-                    break;
-                }
-            }
-        }
-
-        if (instant_winner < 0) {
-            LOG("=tsc= uh oh! irv failed to find winner." );
-        }
-
-        /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[instant_winner];
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_instant_ += sat;
-
-        return instant_winner;
-    }
-
-    /**
-    find the plurality winner.
-    **/
-    int find_plurality_winner() noexcept {
-        std::vector<int> counts;
-        counts.reserve(ncandidates_);
-        counts.resize(ncandidates_);
-
-        /** clear the counts. **/
-        for (int i = 0; i < ncandidates_; ++i) {
-            counts[i] = 0;
-        }
-
-        /** sum the votes. **/
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            int first = rankings[0];
-            counts[first] += bloc.size_;
-        }
-
-        /** find the winner. **/
-        int winner = 0;
-        int votes = -1;
-        for (int i = 0; i < ncandidates_; ++i) {
-            int count = counts[i];
-            if (count > votes) {
-                winner = i;
-                votes = count;
-            }
-        }
-
-        /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[winner];
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_plurality_ += sat;
-
-        /** was it a majority? **/
-        if (2*votes > electorate_.nvoters_) {
-            ++majority_winners_;
-        }
-
-        return winner;
-    }
-
-    /**
-    find the anti-plurality winner.
-    **/
-    int find_anti_plurality_winner() noexcept {
-        std::vector<int> counts;
-        counts.reserve(ncandidates_);
-        counts.resize(ncandidates_);
-
-        /** clear the counts. **/
-        for (int i = 0; i < ncandidates_; ++i) {
-            counts[i] = 0;
-        }
-
-        /** sum the votes. **/
-        int pos = ncandidates_ - 1;
-        for (auto&& it : bloc_map_) {
-            auto& rankings = it.first;
-            auto& bloc = it.second;
-
-            int last = rankings[pos];
-            counts[last] += bloc.size_;
-        }
-
-        /** find the winner. **/
-        int winner = 0;
-        int votes = 0x7FFFFFFF;
-        for (int i = 0; i < ncandidates_; ++i) {
-            int count = counts[i];
-            if (count <= votes) {
-                winner = i;
-                votes = count;
-            }
-        }
-
-        /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[winner];
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_anti_plurality_ += sat;
-
-        return winner;
-    }
-
-    /**
-    check if the winning candidate maximizes the total
-    satisfaction of all candidates.
-    not voters.
-    **/
-    int find_utility_winner() noexcept {
-
-        int winner = -1;
-        double max = -1e99;
-
-        for (int i = 0; i < ncandidates_; ++i) {
-            auto& a = candidates_[i];
-            double utility = 0.0;
-            for (int k = 0; k < ncandidates_; ++k) {
-                if (k == i) {
-                    continue;
-                }
-                auto& b = candidates_[k];
-                utility += a.position_.utility(b.position_);
-            }
-            if (utility > max) {
-                winner = i;
-                max = utility;
-            }
-        }
-
-        /** accumulate the satisfaction. **/
-        auto& candidate = candidates_[winner];
-        double sat = calculate_satisfaction(candidate.utility_, actual_);
-        total_satisfaction_utility_ += sat;
-
-        return winner;
     }
 
     /**
@@ -1885,25 +1420,25 @@ public:
         double max_regret = 1.0 - min_satisfaction;
         double satisfaction_independence = total_satisfaction_independence_ / denom;
         double satisfaction_range = range_.total_satisfaction_/ denom;
-        double satisfaction_condorcet = total_satisfaction_condorcet_/ denom;
-        double satisfaction_borda = total_satisfaction_borda_/ denom;
-        double satisfaction_approval = total_satisfaction_approval_/ denom;
-        double satisfaction_anti_plurality = total_satisfaction_anti_plurality_ / denom;
-        double satisfaction_instant = total_satisfaction_instant_/ denom;
-        double satisfaction_plurality = total_satisfaction_plurality_ / denom;
-        double satisfaction_utility = total_satisfaction_utility_ / denom;
+        double satisfaction_condorcet = condorcet_.total_satisfaction_/ denom;
+        double satisfaction_borda = borda_.total_satisfaction_/ denom;
+        double satisfaction_approval = approval_.total_satisfaction_/ denom;
+        double satisfaction_anti_plurality = anti_plurality_.total_satisfaction_ / denom;
+        double satisfaction_instant = instant_runoff_.total_satisfaction_/ denom;
+        double satisfaction_plurality = plurality_.total_satisfaction_ / denom;
+        double satisfaction_utility = utility_.total_satisfaction_/ denom;
         double satisfaction_ordering = total_satisfaction_ordering_ / double(condorcet_orderings_);
         double maximizes_satisfaction = 100.0 * double(winner_maximizes_satisfaction_) / denom;
         double is_range = 100.0 * double(range_.is_winner_) / denom;
-        double is_condorcet_min = 100.0 * double(winner_is_condorcet_winner_) / denom;
-        double is_condorcet_max = 100.0 * double(winner_is_condorcet_winner_) / non_cycle_trials;
-        double is_borda = 100.0 * double(winner_is_borda_) / denom;
-        double is_approval = 100.0 * double(winner_is_approval_) / denom;
-        double is_anti_plurality = 100.0 * double(winner_is_anti_plurality_) / denom;
-        double is_instant = 100.0 * double(winner_is_instant_) / denom;
-        double is_plurality = 100.0 * double(winner_is_plurality_) / denom;
-        double is_utility = 100.0 * double(winner_is_utility_) / denom;
-        double is_condorcet_loser = 100.0 * double(winner_is_condorcet_loser_) / denom;
+        double is_condorcet_min = 100.0 * double(condorcet_.is_winner_) / denom;
+        double is_condorcet_max = 100.0 * double(condorcet_.is_winner_) / non_cycle_trials;
+        double is_borda = 100.0 * double(borda_.is_winner_) / denom;
+        double is_approval = 100.0 * double(approval_.is_winner_) / denom;
+        double is_anti_plurality = 100.0 * double(anti_plurality_.is_winner_) / denom;
+        double is_instant = 100.0 * double(instant_runoff_.is_winner_) / denom;
+        double is_plurality = 100.0 * double(plurality_.is_winner_) / denom;
+        double is_utility = 100.0 * double(utility_.is_winner_) / denom;
+        double is_condorcet_loser = 100.0 * double(condorcet_is_loser_) / denom;
         double independence = 100.0 * double(independence_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
@@ -2120,6 +1655,518 @@ template<> void ElectoralMethod<Range>::find_winner(
         if (max < rating ) {
             winner_ = i;
             max = rating;
+        }
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+class HeadToHead {
+public:
+    int winner_ = 0;
+    int loser_ = 0;
+    int winner_votes_ = 0;
+    int loser_votes_ = 0;
+};
+
+/**
+return true if candidate a will beat candidate b
+in a head to head matchup.
+**/
+void head_to_head(
+    int a,
+    int b,
+    HeadToHead &result
+) noexcept {
+    auto& bloc_map = g_impl->bloc_map_;
+
+    /** init vote counts. **/
+    int avotes = 0;
+    int bvotes = 0;
+
+    /** for each voter bloc. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        /** give the votes to whichever is first. */
+        for (auto&& which : rankings) {
+            if (which == a) {
+                avotes += bloc.size_;
+                break;
+            }
+            if (which == b) {
+                bvotes += bloc.size_;
+                break;
+            }
+        }
+    }
+
+    /**
+    we assume that a comes before b in the candidate list.
+    and that we're looking for a winner.
+    in which case, by the rules, a wins ties.
+    **/
+    if (avotes >= bvotes) {
+        result.winner_ = a;
+        result.loser_ = b;
+        result.winner_votes_ = avotes;
+        result.loser_votes_ = bvotes;
+    } else {
+        result.winner_ = b;
+        result.loser_ = a;
+        result.winner_votes_ = bvotes;
+        result.loser_votes_ = avotes;
+    }
+}
+
+/**
+condorcet wins the most head to head races.
+**/
+template<> void ElectoralMethod<Condorcet>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& actual = g_impl->actual_;
+
+    /** initialize number of wins for each candidate. **/
+    std::vector<int> wins;
+    wins.reserve(ncandidates);
+    wins.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        wins[i] = 0;
+    }
+
+    LOG("Condorcet results:");
+    /** count head to head victories. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        for (int k = i + 1; k < ncandidates; ++k) {
+            HeadToHead result;
+            head_to_head(i, k, result);
+            LOG(" "<<candidates[result.winner_].name_<<" ("<<result.winner_votes_<<") > "
+                <<candidates[result.loser_].name_<<" ("<<result.loser_votes_<<")");
+            ++wins[result.winner_];
+        }
+    }
+
+    /** test for condorcet ordering. **/
+    std::uint64_t counts = 0;
+
+    /**
+    find the candidate with the most wins.
+    find the average utility while we're here.
+    **/
+    int max = -1;
+    int winner = -1;
+    int nwinners = 0;
+    int loser = -1;
+    double total_utility = 0.0;
+    for (int i = 0; i < ncandidates; ++i) {
+        int w = wins[i];
+        bool sum_it = false;
+        if (max == w) {
+            ++nwinners;
+            sum_it = true;
+        } else if (max < w) {
+            winner = i;
+            nwinners = 1;
+            max = w;
+            total_utility = 0;
+            sum_it = true;
+        }
+        if (sum_it) {
+            total_utility += candidates[i].utility_;
+        }
+        if (w == 0) {
+            loser = i;
+        }
+
+        /** set bit for condorcet ordering. **/
+        counts |= 1 << w;
+    }
+
+    /** no winner if there's a cycle. **/
+    if (nwinners > 1) {
+        LOG("Condorcet cycle exists.");
+        winner = -1;
+        ++g_impl->condorcet_cycles_;
+    }
+
+    /** check if there is a condorcet ordering. **/
+    if (nwinners == 1) {
+        LOG("Condorcet ordering exists.");
+        ++g_impl->condorcet_orderings_;
+        g_impl->total_satisfaction_ordering_ += total_utility;
+    }
+
+    /**
+    average the utility for all candidates in the cycle if any.
+    accumulate for the summary.
+    **/
+    double utility = total_utility / double(nwinners);
+    total_satisfaction_ += g_impl->calculate_satisfaction(utility, actual);
+
+    /** return results. **/
+    winner_ = winner;
+    g_impl->condorcet_loser_ = loser;
+}
+
+/**
+borda count 0 for first, 1 for second, ...
+lowest total wins.
+**/
+template<> void ElectoralMethod<Borda>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+
+    /** initialize number of wins for each candidate. **/
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** for each voter bloc. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        for (int i = 0; i < ncandidates; ++i) {
+            int which = rankings[i];
+            counts[which] += i * bloc.size_;
+        }
+    }
+
+    /** find the lowest count. **/
+    winner_ = -1;
+    int min = 0x7FFFFFFF;
+    for (int i = 0; i < ncandidates; ++i) {
+        int count = counts[i];
+        if (min > count ) {
+            winner_ = i;
+            min = count;
+        }
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+/**
+use the approvals stored when the bloc was created.
+**/
+template<> void ElectoralMethod<Approval>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    /** initialize number of approvals for each candidate. **/
+    std::vector<int> approvals;
+    approvals.reserve(ncandidates);
+    approvals.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        approvals[i] = 0;
+    }
+
+    /** for each voter bloc. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        for (int i = 0; i < ncandidates; ++i) {
+            int which = rankings[i];
+            approvals[which] += bloc.approvals_[i];
+        }
+    }
+
+    /** find the largest approval. **/
+    winner_ = -1;
+    int max = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int approval = approvals[i];
+        if (max < approval ) {
+            winner_ = i;
+            max = approval;
+        }
+    }
+
+    /**
+    what does approval do when there is no majority winner?
+    we use the plurality winner.
+    log it. ship it.
+    **/
+    auto& candidate = candidates[winner_];
+    if (2*max <= nvoters) {
+        int majority = (nvoters + 1) / 2;
+        LOG(candidate.name_<<" has a plurality ("<<max<<") but not a majority ("<<majority<<") of approval votes.");
+    }
+
+    /** accumulate the satisfaction. **/
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+/**
+find the anti-plurality winner.
+**/
+template<> void ElectoralMethod<AntiPlurality>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** clear the counts. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** sum the votes. **/
+    int pos = ncandidates - 1;
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        int last = rankings[pos];
+        counts[last] += bloc.size_;
+    }
+
+    /** find the winner. **/
+    winner_ = 0;
+    int votes = 0x7FFFFFFF;
+    for (int i = 0; i < ncandidates; ++i) {
+        int count = counts[i];
+        if (count <= votes) {
+            winner_ = i;
+            votes = count;
+        }
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+class RankedChoice {
+public:
+    Rankings rankings_;
+    int size_;
+};
+typedef std::vector<RankedChoice> RankedChoices;
+
+/**
+instant runoff voting.
+**/
+template<> void ElectoralMethod<InstantRunoff>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    winner_ = -1;
+
+    /** copy the voter blocs. **/
+    int nblocs = bloc_map.size();
+    RankedChoices ranked_choices;
+    ranked_choices.reserve(nblocs);
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        RankedChoice ranked_choice;
+        ranked_choice.rankings_ = rankings;
+        ranked_choice.size_ = bloc.size_;
+        ranked_choices.push_back(std::move(ranked_choice));
+    }
+
+    /** allocate vote counts. **/
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** initialize a list of elligible candidates. **/
+    std::vector<int> elligible;
+    elligible.reserve(ncandidates);
+    elligible.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        elligible[i] = i;
+    }
+
+    /** repeat until we have a winner. **/
+    for (int nc = ncandidates; nc > 0; --nc) {
+        /** clear the vote counts. **/
+        for (int i = 0; i < ncandidates; ++i) {
+            counts[i] = 0;
+        }
+
+        /** count the first place votes. **/
+        for (auto&& rc : ranked_choices) {
+            int which = rc.rankings_[0];
+            counts[which] += rc.size_;
+        }
+
+        /** find the candidates with the most and least first place votes. **/
+        int winner = -1;
+        int loser = -1;
+        int max = -1;
+        int min = 0x7FFFFFFF;
+        for (int i = 0; i < nc; ++i) {
+            int which = elligible[i];
+            int count = counts[which];
+            /** by rule, first in the list wins ties. **/
+            if (max < count) {
+                winner = which;
+                max = count;
+            }
+            /** by rule, last in the list loses ties. **/
+            if (min >= count) {
+                loser = which;
+                min = count;
+            }
+        }
+
+        /** check for a majority winner. **/
+        if (2*max > nvoters) {
+            winner_ = winner;
+            break;
+        }
+
+        /** remove the loser from the rankings. **/
+        for (auto&& rc : ranked_choices) {
+            auto& rankings = rc.rankings_;
+            for (int i = 0; i < nc; ++i) {
+                int which = rankings[i];
+                if (which == loser) {
+                    rankings.erase(rankings.begin() + i);
+                    break;
+                }
+            }
+        }
+
+        /** remove the loser from the candidate list. **/
+        for (int i = 0; i < nc; ++i) {
+            int which = elligible[i];
+            if (which == loser) {
+                elligible.erase(elligible.begin() + i);
+                break;
+            }
+        }
+    }
+
+    if (winner_ < 0) {
+        LOG("=tsc= uh oh! irv failed to find winner." );
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+/**
+find the plurality winner.
+**/
+template<> void ElectoralMethod<Plurality>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** clear the counts. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** sum the votes. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        int first = rankings[0];
+        counts[first] += bloc.size_;
+    }
+
+    /** find the winner. **/
+    winner_ = -1;
+    int votes = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int count = counts[i];
+        if (count > votes) {
+            winner_ = i;
+            votes = count;
+        }
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+
+    /** was it a majority? **/
+    if (2*votes > nvoters) {
+        ++g_impl->majority_winners_;
+    }
+}
+
+/**
+check if the winning candidate maximizes the total
+satisfaction of all candidates.
+not voters.
+**/
+template<> void ElectoralMethod<Utility>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& actual = g_impl->actual_;
+
+    winner_ = -1;
+    double max = -1e99;
+
+    for (int i = 0; i < ncandidates; ++i) {
+        auto& a = candidates[i];
+        double utility = 0.0;
+        for (int k = 0; k < ncandidates; ++k) {
+            if (k == i) {
+                continue;
+            }
+            auto& b = candidates[k];
+            utility += a.position_.utility(b.position_);
+        }
+        if (utility > max) {
+            winner_ = i;
+            max = utility;
         }
     }
 
