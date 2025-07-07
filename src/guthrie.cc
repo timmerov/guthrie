@@ -200,6 +200,7 @@ normalize electorate to range from 0.0 to 1.0.
 clustered voters,
 multiple issue dimensions,
 anti-plurality - winner has fewest last place votes.
+bucklin - while no greatest majority, accumulate next choice counts.
 
 things to do:
 
@@ -208,7 +209,6 @@ non-linear utility or piece-wise linear utility,
 voting systems to consider adding:
 
 majority judgement voting - winner has the largest median utility.
-bucklin voting - while no largest majority, accumulate next highest votes.
 two round system - top 2 pluralities go head to head.
 
 other voting systems worth mentioning:
@@ -236,11 +236,11 @@ cumulative voting - split 1.0 votes among candidates.
 namespace {
 
 /** number of trials. **/
-constexpr int kNTrials = 1;
+//constexpr int kNTrials = 1;
 //constexpr int kNTrials = 10;
 //constexpr int kNTrials = 30;
 //constexpr int kNTrials = 300;
-//constexpr int kNTrials = 1000;
+constexpr int kNTrials = 1000;
 //constexpr int kNTrials = 10*1000;
 //constexpr int kNTrials = 30*1000;
 
@@ -435,7 +435,6 @@ public:
 };
 /**
 to do:
-Bucklin
 MajorityJudgement
 */
 class Guthrie {};
@@ -444,6 +443,7 @@ class Condorcet {};
 class Borda {};
 class Approval {};
 class AntiPlurality {};
+class Bucklin {};
 class InstantRunoff {};
 class Plurality {};
 class Utility {};
@@ -452,6 +452,7 @@ template<> void ElectoralMethod<Range>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<Condorcet>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<Borda>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<Approval>::find_winner(bool quiet) noexcept;
+template<> void ElectoralMethod<Bucklin>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<AntiPlurality>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<InstantRunoff>::find_winner(bool quiet) noexcept;
 template<> void ElectoralMethod<Plurality>::find_winner(bool quiet) noexcept;
@@ -485,6 +486,7 @@ public:
     ElectoralMethod<Condorcet> condorcet_;
     ElectoralMethod<Borda> borda_;
     ElectoralMethod<Approval> approval_;
+    ElectoralMethod<Bucklin> bucklin_;
     ElectoralMethod<AntiPlurality> anti_plurality_;
     ElectoralMethod<InstantRunoff> instant_runoff_;
     ElectoralMethod<Plurality> plurality_;
@@ -1196,6 +1198,7 @@ public:
         condorcet_.find_winner();
         borda_.find_winner();
         approval_.find_winner();
+        bucklin_.find_winner();
         anti_plurality_.find_winner();
         instant_runoff_.find_winner();
         plurality_.find_winner();
@@ -1221,6 +1224,9 @@ public:
         }
         if (guthrie_.winner_ == approval_.winner_) {
             ++approval_.is_winner_;
+        }
+        if (guthrie_.winner_ == bucklin_.winner_) {
+            ++bucklin_.is_winner_;
         }
         if (guthrie_.winner_ == anti_plurality_.winner_) {
             ++anti_plurality_.is_winner_;
@@ -1286,6 +1292,8 @@ public:
         LOG("Borda winner                : "<<candidates_[borda_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, approval_.winner_);
         LOG("Approval winner             : "<<candidates_[approval_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, bucklin_.winner_);
+        LOG("Bucklin winner              : "<<candidates_[bucklin_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, anti_plurality_.winner_);
         LOG("Anti-plurality winner       : "<<candidates_[anti_plurality_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, instant_runoff_.winner_);
@@ -1424,6 +1432,7 @@ public:
         double satisfaction_borda = borda_.total_satisfaction_/ denom;
         double satisfaction_approval = approval_.total_satisfaction_/ denom;
         double satisfaction_anti_plurality = anti_plurality_.total_satisfaction_ / denom;
+        double satisfaction_bucklin = bucklin_.total_satisfaction_/ denom;
         double satisfaction_instant = instant_runoff_.total_satisfaction_/ denom;
         double satisfaction_plurality = plurality_.total_satisfaction_ / denom;
         double satisfaction_utility = utility_.total_satisfaction_/ denom;
@@ -1434,6 +1443,7 @@ public:
         double is_condorcet_max = 100.0 * double(condorcet_.is_winner_) / non_cycle_trials;
         double is_borda = 100.0 * double(borda_.is_winner_) / denom;
         double is_approval = 100.0 * double(approval_.is_winner_) / denom;
+        double is_bucklin = 100.0 * double(bucklin_.is_winner_) / denom;
         double is_anti_plurality = 100.0 * double(anti_plurality_.is_winner_) / denom;
         double is_instant = 100.0 * double(instant_runoff_.is_winner_) / denom;
         double is_plurality = 100.0 * double(plurality_.is_winner_) / denom;
@@ -1452,18 +1462,20 @@ public:
         LOG("Voter regret (max)               : "<<regret<<" ("<<max_regret<<")");
         LOG("Voter satisfaction (strategic)   : "<<satisfaction_independence);
         LOG("Voter satisfaction range         : "<<satisfaction_range);
-        LOG("Voter satisfaction condorcet     : "<<satisfaction_condorcet);
-        LOG("Voter satisfaction borda         : "<<satisfaction_borda);
+        LOG("Voter satisfaction Condorcet     : "<<satisfaction_condorcet);
+        LOG("Voter satisfaction Borda         : "<<satisfaction_borda);
         LOG("Voter satisfaction approval      : "<<satisfaction_approval);
+        LOG("Voter satisfaction Bucklin       : "<<satisfaction_bucklin);
         LOG("Voter satisfaction anti-plurality: "<<satisfaction_anti_plurality);
         LOG("Voter satisfaction instant       : "<<satisfaction_instant);
         LOG("Voter satisfaction plurality     : "<<satisfaction_plurality);
         LOG("Candidate satisfaction           : "<<satisfaction_utility);
         LOG("Maximizes voter satisfaction     : "<<maximizes_satisfaction<<"%");
         LOG("Agrees with range                : "<<is_range<<"%");
-        LOG("Agrees with condorcet            : "<<is_condorcet_min<<"% "<<is_condorcet_max<<"%");
-        LOG("Agrees with borda                : "<<is_borda<<"%");
+        LOG("Agrees with Condorcet            : "<<is_condorcet_min<<"% "<<is_condorcet_max<<"%");
+        LOG("Agrees with Borda                : "<<is_borda<<"%");
         LOG("Agrees with approval             : "<<is_approval<<"%");
+        LOG("Agrees with Bucklin              : "<<is_bucklin<<"%");
         LOG("Agrees with anti-plurality       : "<<is_anti_plurality<<"%");
         LOG("Agrees with instant              : "<<is_instant<<"%");
         LOG("Agrees with plurality            : "<<is_plurality<<"%");
@@ -1959,6 +1971,66 @@ template<> void ElectoralMethod<AntiPlurality>::find_winner(
         if (count <= votes) {
             winner_ = i;
             votes = count;
+        }
+    }
+
+    /** accumulate the satisfaction. **/
+    auto& candidate = candidates[winner_];
+    double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+    total_satisfaction_ += sat;
+}
+
+/**
+bucklin voting.
+
+while no greatest majority winner, accumulate the next choices.
+**/
+template<> void ElectoralMethod<Bucklin>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    auto& actual = g_impl->actual_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** clear the counts. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** potentially accumulate over all rankings. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        /** no winner. **/
+        winner_ = -1;
+
+        /** sum the votes. **/
+        for (auto&& it : bloc_map) {
+            auto& rankings = it.first;
+            auto& bloc = it.second;
+
+            int which = rankings[i];
+            counts[which] += bloc.size_;
+        }
+
+        /** find the index with the maximum count. **/
+        int max = -1;
+        for (int k = 0; k < ncandidates; ++k) {
+            int c = counts[k];
+            LOG("bucklin k="<<k<<" c="<<c);
+            if (c > max) {
+                max = c;
+                winner_ = k;
+            }
+        }
+
+        /** done when they have the greatest majority. **/
+        if (2*max > nvoters) {
+            break;
         }
     }
 
