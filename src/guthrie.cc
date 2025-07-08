@@ -204,12 +204,27 @@ bucklin - while no greatest majority, accumulate next choice counts.
 
 things to do:
 
-non-linear utility or piece-wise linear utility,
+- non-linear utility or piece-wise linear utility.
+- "dispersion" - move candidates towards the center.
+cause voters are far more radical than the candidates.
+looks like this paper:
+https://voting-in-the-abstract.medium.com/voter-satisfaction-efficiency-many-many-results-ad66ffa87c9e
+scales the candidate standard deviation from 5% to 100% of the voter standard deviation.
+i think we can just move the candidates position centerward by same percentages.
+realistic numbers range from 34% to 94%.
+with maybe a reasonable guess around 75%.
+the apparent effect of dispersion is to amplify the difference between electoral methods.
+- account for candidate quality. this is a random adjustment to utility.
 
 voting systems to consider adding:
 
 majority judgement voting - winner has the largest median utility.
-two round system - top 2 pluralities go head to head.
+two round plurality - top 2 pluralities go head to head.
+two round approval - top 2 vote getters go head to head.
+star - score candidates 0 to 5.
+the winner has one of the top two highest total scores and...
+is scored higher than the the other finalist on more ballots.
+ranked robin - condorcet but voters can give candidates equal ranking.
 
 other voting systems worth mentioning:
 smith methods - condorcet completion.
@@ -415,14 +430,15 @@ public:
 };
 typedef std::map<Rankings, Bloc> BlocMap;
 
-class GuthrieImpl;
-static GuthrieImpl *g_impl = nullptr;
-
 /**
 this particular piece of c++ arcana is called:
 Template Specialization of Member Function Outside the Class
-
-the XXX::find_winner functions are defined later.
+it's strange that this statement:
+    ElectoralMethod<Guthrie> guthrie_;
+does not automatically create/define this function:
+    template<> void ElectoralMethod<Guthrie>::find_winner(bool quiet) noexcept
+i suppose there's a reason for it.
+the actual XXX::find_winner functions are defined later.
 **/
 template <typename SpecificMethod>
 class ElectoralMethod {
@@ -434,29 +450,32 @@ public:
     void find_winner(bool quiet = kQuiet) noexcept;
 };
 /**
+macro creates the trivial class
+and forward declares the find_winner function.
+**/
+#define TemplateSpecializaationOfMemberFunctionOutsideClass(T) \
+class T {}; \
+template<> void ElectoralMethod<T>::find_winner(bool quiet) noexcept
+/**
+analyzed electoral methods.
+**/
+TemplateSpecializaationOfMemberFunctionOutsideClass(Guthrie);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Range);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Condorcet);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Borda);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Approval);
+TemplateSpecializaationOfMemberFunctionOutsideClass(AntiPlurality);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Bucklin);
+TemplateSpecializaationOfMemberFunctionOutsideClass(InstantRunoff);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Plurality);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Utility);
+/**
 to do:
 MajorityJudgement
 */
-class Guthrie {};
-class Range {};
-class Condorcet {};
-class Borda {};
-class Approval {};
-class AntiPlurality {};
-class Bucklin {};
-class InstantRunoff {};
-class Plurality {};
-class Utility {};
-template<> void ElectoralMethod<Guthrie>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Range>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Condorcet>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Borda>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Approval>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Bucklin>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<AntiPlurality>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<InstantRunoff>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Plurality>::find_winner(bool quiet) noexcept;
-template<> void ElectoralMethod<Utility>::find_winner(bool quiet) noexcept;
+
+class GuthrieImpl;
+static GuthrieImpl *g_impl = nullptr;
 
 class GuthrieImpl {
 public:
