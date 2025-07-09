@@ -185,6 +185,16 @@ qed.
 the interesting cases are when there are condorcet cycles.
 which require two or more uncorrelated axes for the issues.
 
+"dispersion" moves candidates towards the center.
+cause voters are far more radical than the candidates.
+looks like this paper:
+https://voting-in-the-abstract.medium.com/voter-satisfaction-efficiency-many-many-results-ad66ffa87c9e
+scales the candidate standard deviation from 5% to 100% of the voter standard deviation.
+i think we can just move the candidates position centerward by same percentages.
+realistic numbers range from 34% to 94%.
+with maybe a reasonable guess around 75%.
+the apparent effect of dispersion is to amplify the difference between electoral methods.
+
 things done:
 
 handle ties.
@@ -201,20 +211,14 @@ clustered voters,
 multiple issue dimensions,
 anti-plurality - winner has fewest last place votes.
 bucklin - while no greatest majority, accumulate next choice counts.
+dispersion
 
 things to do:
 
 - non-linear utility or piece-wise linear utility.
-- "dispersion" - move candidates towards the center.
-cause voters are far more radical than the candidates.
-looks like this paper:
-https://voting-in-the-abstract.medium.com/voter-satisfaction-efficiency-many-many-results-ad66ffa87c9e
-scales the candidate standard deviation from 5% to 100% of the voter standard deviation.
-i think we can just move the candidates position centerward by same percentages.
-realistic numbers range from 34% to 94%.
-with maybe a reasonable guess around 75%.
-the apparent effect of dispersion is to amplify the difference between electoral methods.
 - account for candidate quality. this is a random adjustment to utility.
+- instead of averaging satisfaction over many trials...
+average the best utility, random utility, and winner's utility.
 
 voting systems to consider adding:
 
@@ -318,9 +322,23 @@ default compromise is about 0.4.
 **/
 constexpr double kPrimaryPower = 0.4;
 
+/**
+the assumption is voters are more radical than candidates.
+we select candidates at random from the voters.
+then we move them towards the middle.
+a dispersion factor of 1.00 means don't move them at all.
+0.00 means move them to the exact center.
+real world estimates for dispersion range from 0.3 to 0.9.
+with best guess around 0.7.
+low dispersion amplifies errors by the electoral method.
+with dispersion around 0.7, plurality satisfaction is 0.0 or negative.
+interesting.
+**/
+constexpr double kDispersion = 0.7;
+
 /** option to use a fixed seed for testing. **/
 constexpr std::uint64_t kSeedChoice = 0;
-//constexpr std::uint64_t kSeedChoice = 1749440727065077936;
+//constexpr std::uint64_t kSeedChoice = 1752039337855143834;
 
 /**
 option to use approval votes to find guthrie winner.
@@ -488,6 +506,7 @@ public:
     int ntrials_ = kNTrials;
     int ncandidates_ = kNCandidates;
     int canddiate_method_ = kCandidateMethod;
+    double dispersion_ = kDispersion;
 
     /** the electorate and the candidates. **/
     Electorate electorate_;
@@ -623,6 +642,7 @@ public:
         } else {
             LOG("Issue axes       : "<<electorate_.naxes_<<" ("<<electorate_.axis_weight_decay_<<")");
         }
+        LOG("Dispersion       : "<<dispersion_);
 
         if (kUseApprovalVotes) {
             LOG("Note: Guthrie winner is found using approval votes instead of single vote.");
@@ -690,6 +710,7 @@ public:
         **/
         LOG("Selecting candidates from the electorate.");
         pick_candidates_from_electorate();
+        disperse_candidates();
         /** sort them. **/
         std::sort(candidates_.begin(), candidates_.end());
         single_transferable_vote_primary();
@@ -741,6 +762,52 @@ public:
             duplicates[i] = true;
             candidate.name_ = name++;
             candidate.position_ = electorate_.voters_[i].position_;
+        }
+    }
+
+    /**
+    move candidates closer to the political center.
+    **/
+    void disperse_candidates() noexcept {
+        if (dispersion_ == 1.0) {
+            return;
+        }
+
+        /** find the average voter position. **/
+        int naxes = electorate_.naxes_;
+        Position pos;
+        pos.axis_.resize(naxes);
+        for (int i = 0; i < naxes; ++i) {
+            pos.axis_[i] = 0.0;
+        }
+        for (auto&& voter : electorate_.voters_) {
+            for (int i = 0; i < naxes; ++i) {
+                pos.axis_[i] += voter.position_.axis_[i];
+            }
+        }
+        double nvoters = double(electorate_.nvoters_);
+        double denom = 1.0 / double(nvoters);
+        for (int i = 0; i < naxes; ++i) {
+            pos.axis_[i] *= denom;
+        }
+
+        /**
+        pre-apply the weighting factor to the average position.
+        yes, we could optimize this step with the divide in the average.
+        but that would make the code less clear.
+        **/
+        double factor = 1.0 - dispersion_;
+        for (int i = 0; i < naxes; ++i) {
+            pos.axis_[i] *= factor;
+        }
+
+        /** move all candidates towards the center. **/
+        for (auto&& candidate : candidates_) {
+            for (int i = 0; i < naxes; ++i) {
+                double cpos = candidate.position_.axis_[i];
+                double apos = pos.axis_[i];
+                candidate.position_.axis_[i] = dispersion_ * cpos + apos;
+            }
         }
     }
 
@@ -1792,7 +1859,7 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     find the average utility while we're here.
     **/
     int max = -1;
-    int winner = -1;
+    winner_ = -1;
     int nwinners = 0;
     int loser = -1;
     double total_utility = 0.0;
@@ -1803,7 +1870,7 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
             ++nwinners;
             sum_it = true;
         } else if (max < w) {
-            winner = i;
+            winner_ = i;
             nwinners = 1;
             max = w;
             total_utility = 0;
@@ -1823,7 +1890,7 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     /** no winner if there's a cycle. **/
     if (nwinners > 1) {
         LOG("Condorcet cycle exists.");
-        winner = -1;
+        winner_ = -1;
         ++g_impl->condorcet_cycles_;
     }
 
@@ -1831,7 +1898,9 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     if (nwinners == 1) {
         LOG("Condorcet ordering exists.");
         ++g_impl->condorcet_orderings_;
-        g_impl->total_satisfaction_ordering_ += total_utility;
+        auto& candidate = candidates[winner_];
+        double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
+        g_impl->total_satisfaction_ordering_ += sat;
     }
 
     /**
@@ -1839,10 +1908,10 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     accumulate for the summary.
     **/
     double utility = total_utility / double(nwinners);
-    total_satisfaction_ += g_impl->calculate_satisfaction(utility, actual);
+    double sat = g_impl->calculate_satisfaction(utility, actual);
+    total_satisfaction_ += sat;
 
     /** return results. **/
-    winner_ = winner;
     g_impl->condorcet_loser_ = loser;
 }
 
@@ -2001,7 +2070,6 @@ template<> void ElectoralMethod<AntiPlurality>::find_winner(
 
 /**
 bucklin voting.
-
 while no greatest majority winner, accumulate the next choices.
 **/
 template<> void ElectoralMethod<Bucklin>::find_winner(
@@ -2040,7 +2108,6 @@ template<> void ElectoralMethod<Bucklin>::find_winner(
         int max = -1;
         for (int k = 0; k < ncandidates; ++k) {
             int c = counts[k];
-            LOG("bucklin k="<<k<<" c="<<c);
             if (c > max) {
                 max = c;
                 winner_ = k;
