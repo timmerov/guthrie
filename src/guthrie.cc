@@ -213,12 +213,15 @@ anti-plurality - winner has fewest last place votes.
 bucklin - while no greatest majority, accumulate next choice counts.
 dispersion
 
+things in progress:
+- instead of averaging satisfaction over many trials...
+average the best utility, random utility, and winner's utility.
+so far i like this form of satisfaction better than the standard.
+
 things to do:
 
 - non-linear utility or piece-wise linear utility.
 - account for candidate quality. this is a random adjustment to utility.
-- instead of averaging satisfaction over many trials...
-average the best utility, random utility, and winner's utility.
 
 voting systems to consider adding:
 
@@ -334,7 +337,9 @@ low dispersion amplifies errors by the electoral method.
 with dispersion around 0.7, plurality satisfaction is 0.0 or negative.
 interesting.
 **/
+//constexpr double kDispersion = 1.0;
 constexpr double kDispersion = 0.7;
+//constexpr double kDispersion = 0.3;
 
 /** option to use a fixed seed for testing. **/
 constexpr std::uint64_t kSeedChoice = 0;
@@ -464,6 +469,7 @@ public:
     int winner_ = -1;
     int is_winner_ = 0;
     double total_satisfaction_ = 0.0;
+    double total_utility_ = 0.0;
 
     void find_winner(bool quiet = kQuiet) noexcept;
 };
@@ -517,6 +523,7 @@ public:
     /** results from the trial. **/
     SatisfactionMetrics theoretical_;
     SatisfactionMetrics actual_;
+    SatisfactionMetrics accumulated_;
 
     /** analyzed electoral methods. **/
     ElectoralMethod<Guthrie> guthrie_;
@@ -532,6 +539,7 @@ public:
 
     /** summary **/
     double total_satisfaction_ = 0.0;
+    double total_utility_ = 0.0;
     double total_satisfaction_independence_ = 0.0;
     double total_satisfaction_ordering_ = 0.0;
     int majority_winners_ = 0;
@@ -580,6 +588,8 @@ public:
             init_candidates();
             calculate_utilities(actual_);
             use_median_satisfaction(actual_);
+            accumulated_.best_ += actual_.best_;
+            accumulated_.average_ += actual_.average_;
             vote();
             guthrie_.find_winner();
             show_satisfaction();
@@ -1414,6 +1424,7 @@ public:
 
         /** update summary **/
         total_satisfaction_ += satisfaction;
+        total_utility_ += winning_candidate.utility_;
         min_satisfaction_ = std::min(min_satisfaction_, satisfaction);
 
         return satisfaction_winner;
@@ -1572,6 +1583,30 @@ public:
         LOG("Condorcet cycles                 : "<<condorcet_cycles<<"%");
         LOG("Condorcet orderings              : "<<condorcet_orderings<<"%");
         LOG("Ordering satisfaction            : "<<satisfaction_ordering);
+
+        /** calculate alternative satisfaction. **/
+        accumulated_.best_ /= denom;
+        accumulated_.average_ /= denom;
+        satisfaction = calculate_satisfaction(total_utility_/denom, accumulated_);
+        satisfaction_range = calculate_satisfaction(range_.total_utility_/denom, accumulated_);
+        satisfaction_condorcet = calculate_satisfaction(condorcet_.total_utility_/denom, accumulated_);
+        satisfaction_borda = calculate_satisfaction(borda_.total_utility_/denom, accumulated_);
+        satisfaction_approval = calculate_satisfaction(approval_.total_utility_/denom, accumulated_);
+        satisfaction_anti_plurality = calculate_satisfaction(anti_plurality_.total_utility_/denom, accumulated_);
+        satisfaction_bucklin = calculate_satisfaction(bucklin_.total_utility_/denom, accumulated_);
+        satisfaction_instant = calculate_satisfaction(instant_runoff_.total_utility_/denom, accumulated_);
+        satisfaction_plurality = calculate_satisfaction(plurality_.total_utility_/denom, accumulated_);
+        LOG("");
+        LOG("Alternative satisfaction calculation method:");
+        LOG(" Guthrie       : "<<satisfaction);
+        LOG(" range         : "<<satisfaction_range);
+        LOG(" Condorcet     : "<<satisfaction_condorcet);
+        LOG(" Borda         : "<<satisfaction_borda);
+        LOG(" approval      : "<<satisfaction_approval);
+        LOG(" Bucklin       : "<<satisfaction_bucklin);
+        LOG(" anti-plurality: "<<satisfaction_anti_plurality);
+        LOG(" instant       : "<<satisfaction_instant);
+        LOG(" plurality     : "<<satisfaction_plurality);
     }
 };
 
@@ -1760,6 +1795,7 @@ template<> void ElectoralMethod<Range>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 class HeadToHead {
@@ -1910,6 +1946,7 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     double utility = total_utility / double(nwinners);
     double sat = g_impl->calculate_satisfaction(utility, actual);
     total_satisfaction_ += sat;
+    total_utility_ += utility;
 
     /** return results. **/
     g_impl->condorcet_loser_ = loser;
@@ -1961,6 +1998,7 @@ template<> void ElectoralMethod<Borda>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 /**
@@ -2019,6 +2057,7 @@ template<> void ElectoralMethod<Approval>::find_winner(
     /** accumulate the satisfaction. **/
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 /**
@@ -2066,6 +2105,7 @@ template<> void ElectoralMethod<AntiPlurality>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 /**
@@ -2124,6 +2164,7 @@ template<> void ElectoralMethod<Bucklin>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 class RankedChoice {
@@ -2243,6 +2284,7 @@ template<> void ElectoralMethod<InstantRunoff>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 /**
@@ -2290,6 +2332,7 @@ template<> void ElectoralMethod<Plurality>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 
     /** was it a majority? **/
     if (2*votes > nvoters) {
@@ -2332,6 +2375,7 @@ template<> void ElectoralMethod<Utility>::find_winner(
     auto& candidate = candidates[winner_];
     double sat = g_impl->calculate_satisfaction(candidate.utility_, actual);
     total_satisfaction_ += sat;
+    total_utility_ += candidate.utility_;
 }
 
 } // anonymous namespace
