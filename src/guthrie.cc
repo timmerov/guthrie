@@ -218,6 +218,7 @@ bucklin - while no greatest majority, accumulate next choice counts.
 dispersion
 average utilities then calculate satisfactions instead of vice versa.
 two round plurality - top 2 pluralities go head to head.
+two round approval - top 2 vote getters go head to head.
 
 things in progress:
 
@@ -232,7 +233,6 @@ an election with high spread contributes more.
 voting systems to consider adding:
 
 majority judgement voting - winner has the largest median utility.
-two round approval - top 2 vote getters go head to head.
 star - score candidates 0 to 5.
 the winner has one of the top two highest total scores and...
 is scored higher than the the other finalist on more ballots.
@@ -295,8 +295,8 @@ constexpr int kNClusters = kNCandidates * 2;
 
 /** options for number of issue dimensions (axes). **/
 //constexpr int kNAxes = 1;
-constexpr int kNAxes = 2;
-//constexpr int kNAxes = 3;
+//constexpr int kNAxes = 2;
+constexpr int kNAxes = 3;
 
 /**
 option for relative weighting of the axes.
@@ -488,6 +488,7 @@ template<> void ElectoralMethod<T>::find_winner(bool quiet) noexcept
 analyzed electoral methods.
 **/
 TemplateSpecializaationOfMemberFunctionOutsideClass(Guthrie);
+TemplateSpecializaationOfMemberFunctionOutsideClass(ApprovalRunoff);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Range);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Condorcet);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Borda);
@@ -495,9 +496,9 @@ TemplateSpecializaationOfMemberFunctionOutsideClass(Approval);
 TemplateSpecializaationOfMemberFunctionOutsideClass(AntiPlurality);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Bucklin);
 TemplateSpecializaationOfMemberFunctionOutsideClass(InstantRunoff);
+TemplateSpecializaationOfMemberFunctionOutsideClass(PluralityRunoff);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Plurality);
 TemplateSpecializaationOfMemberFunctionOutsideClass(CandidateMethod);
-TemplateSpecializaationOfMemberFunctionOutsideClass(PluralityRunoff);
 /**
 to do:
 MajorityJudgement
@@ -532,6 +533,7 @@ public:
 
     /** analyzed electoral methods. **/
     ElectoralMethod<Guthrie> guthrie_;
+    ElectoralMethod<ApprovalRunoff> approval_runoff_;
     ElectoralMethod<Range> range_;
     ElectoralMethod<Condorcet> condorcet_;
     ElectoralMethod<Borda> borda_;
@@ -1293,6 +1295,7 @@ public:
         LOG("");
         LOG("Checking voting criteria.");
         int max_satisfaction = find_max_satisfaction_candidate();
+        approval_runoff_.find_winner();
         range_.find_winner();
         condorcet_.find_winner();
         borda_.find_winner();
@@ -1354,6 +1357,8 @@ public:
         LOG("Guthrie winner              : "<<candidates_[guthrie_.winner_].name_);
         result = result_to_string(guthrie_.winner_, max_satisfaction);
         LOG("Maximizes voter satisfaction: "<<candidates_[max_satisfaction].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, approval_runoff_.winner_);
+        LOG("Approval runoff winner      : "<<candidates_[approval_runoff_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, range_.winner_);
         LOG("Range winner                : "<<candidates_[range_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, condorcet_.winner_);
@@ -1494,6 +1499,7 @@ public:
         accumulated_.best_ /= denom;
         accumulated_.average_ /= denom;
         double average_utility = total_utility_ / denom;
+        double average_approval_runoff = approval_runoff_.total_utility_ / denom;
         double average_range = range_.total_utility_ / denom;
         double average_condorcet = condorcet_.total_utility_ / denom;
         double average_borda = borda_.total_utility_ / denom;
@@ -1505,6 +1511,7 @@ public:
         double average_plurality = plurality_.total_utility_ / denom;
         double average_candidate = candidate_.total_utility_ / denom;
         double satisfaction = calculate_satisfaction(average_utility, accumulated_);
+        double satisfaction_approval_runoff = calculate_satisfaction(average_approval_runoff, accumulated_);
         double satisfaction_range = calculate_satisfaction(average_range, accumulated_);
         double satisfaction_condorcet = calculate_satisfaction(average_condorcet, accumulated_);
         double satisfaction_borda = calculate_satisfaction(average_borda, accumulated_);
@@ -1521,6 +1528,7 @@ public:
         double satisfaction_strategic = calculate_satisfaction(average_utility_strategic, accumulated_);
         double satisfaction_ordering = calculate_satisfaction(average_utility_ordering, accumulated_);
         double maximizes_satisfaction = 100.0 * double(winner_maximizes_satisfaction_) / denom;
+        double is_approval_runoff = 100.0 * double(approval_runoff_.is_winner_) / denom;
         double is_range = 100.0 * double(range_.is_winner_) / denom;
         double is_condorcet_min = 100.0 * double(condorcet_.is_winner_) / denom;
         double is_condorcet_max = 100.0 * double(condorcet_.is_winner_) / non_cycle_trials;
@@ -1543,6 +1551,7 @@ public:
         LOG("Summary:");
         LOG("Voter Satisfactions by method :");
         LOG(" Guthrie (strategic)          : "<<satisfaction<<" ("<<satisfaction_strategic<<")");
+        LOG(" approval runoff              : "<<satisfaction_approval_runoff);
         LOG(" range                        : "<<satisfaction_range);
         LOG(" Condorcet (winner exists)    : "<<satisfaction_condorcet<<" ("<<satisfaction_ordering<<")");
         LOG(" Borda                        : "<<satisfaction_borda);
@@ -1553,6 +1562,7 @@ public:
         LOG(" plurality runoff             : "<<satisfaction_plurality_runoff);
         LOG(" plurality                    : "<<satisfaction_plurality);
         LOG("Guthrie correlations by method:");
+        LOG(" approval runoff              : "<<is_approval_runoff<<"%");
         LOG(" range                        : "<<is_range<<"%");
         LOG(" Condorcet (winner exists)    : "<<is_condorcet_min<<"% ("<<is_condorcet_max<<"%)");
         LOG(" Borda                        : "<<is_borda<<"%");
@@ -1708,6 +1718,134 @@ template<> void ElectoralMethod<Guthrie>::find_winner(
     }
 }
 
+class HeadToHead {
+public:
+    HeadToHead() = default;
+    ~HeadToHead() = default;
+
+    int winner_ = 0;
+    int loser_ = 0;
+    int winner_votes_ = 0;
+    int loser_votes_ = 0;
+
+    /** find the winner in a head to head election. **/
+    void resolve(
+        int a,
+        int b
+    ) noexcept {
+        auto& bloc_map = g_impl->bloc_map_;
+
+        /** init vote counts. **/
+        int avotes = 0;
+        int bvotes = 0;
+
+        /** for each voter bloc. **/
+        for (auto&& it : bloc_map) {
+            auto& rankings = it.first;
+            auto& bloc = it.second;
+
+            /** give the votes to whichever is first. */
+            for (auto&& which : rankings) {
+                if (which == a) {
+                    avotes += bloc.size_;
+                    break;
+                }
+                if (which == b) {
+                    bvotes += bloc.size_;
+                    break;
+                }
+            }
+        }
+
+        /**
+        we assume that a comes before b in the candidate list.
+        and that we're looking for a winner.
+        in which case, by the rules, a wins ties.
+        **/
+        if (avotes >= bvotes) {
+            winner_ = a;
+            loser_ = b;
+            winner_votes_ = avotes;
+            loser_votes_ = bvotes;
+        } else {
+            winner_ = b;
+            loser_ = a;
+            winner_votes_ = bvotes;
+            loser_votes_ = avotes;
+        }
+    }
+};
+
+/**
+find the two round approval winner where the top two have a runoff.
+use the approvals stored when the bloc was created.
+**/
+template<> void ElectoralMethod<ApprovalRunoff>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+
+    /** initialize number of approvals for each candidate. **/
+    std::vector<int> approvals;
+    approvals.reserve(ncandidates);
+    approvals.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        approvals[i] = 0;
+    }
+
+    /** for each voter bloc. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        for (int i = 0; i < ncandidates; ++i) {
+            int which = rankings[i];
+            approvals[which] += bloc.approvals_[i];
+        }
+    }
+
+    /** find the largest approval. **/
+    winner_ = -1;
+    int max = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int approval = approvals[i];
+        if (max < approval ) {
+            winner_ = i;
+            max = approval;
+        }
+    }
+
+    /** find the second largest approval. **/
+    approvals[winner_] = 0;
+    int second = -1;
+    max = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int approval = approvals[i];
+        if (max < approval ) {
+            second = i;
+            max = approval;
+        }
+    }
+
+    /** find the head to head winner. **/
+    HeadToHead runoff;
+    runoff.resolve(winner_, second);
+
+    /** overwrite the winner. **/
+    winner_ = runoff.winner_;
+
+    /** accumulate the utility. **/
+    auto& candidate = candidates[winner_];
+    total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
+}
+
 /**
 find the range (score) voting winner.
 assign a range based on utilities for each block.
@@ -1763,65 +1901,6 @@ template<> void ElectoralMethod<Range>::find_winner(
     }
 }
 
-class HeadToHead {
-public:
-    int winner_ = 0;
-    int loser_ = 0;
-    int winner_votes_ = 0;
-    int loser_votes_ = 0;
-};
-
-/**
-return true if candidate a will beat candidate b
-in a head to head matchup.
-**/
-void head_to_head(
-    int a,
-    int b,
-    HeadToHead &result
-) noexcept {
-    auto& bloc_map = g_impl->bloc_map_;
-
-    /** init vote counts. **/
-    int avotes = 0;
-    int bvotes = 0;
-
-    /** for each voter bloc. **/
-    for (auto&& it : bloc_map) {
-        auto& rankings = it.first;
-        auto& bloc = it.second;
-
-        /** give the votes to whichever is first. */
-        for (auto&& which : rankings) {
-            if (which == a) {
-                avotes += bloc.size_;
-                break;
-            }
-            if (which == b) {
-                bvotes += bloc.size_;
-                break;
-            }
-        }
-    }
-
-    /**
-    we assume that a comes before b in the candidate list.
-    and that we're looking for a winner.
-    in which case, by the rules, a wins ties.
-    **/
-    if (avotes >= bvotes) {
-        result.winner_ = a;
-        result.loser_ = b;
-        result.winner_votes_ = avotes;
-        result.loser_votes_ = bvotes;
-    } else {
-        result.winner_ = b;
-        result.loser_ = a;
-        result.winner_votes_ = bvotes;
-        result.loser_votes_ = avotes;
-    }
-}
-
 /**
 condorcet wins the most head to head races.
 **/
@@ -1844,7 +1923,7 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     for (int i = 0; i < ncandidates; ++i) {
         for (int k = i + 1; k < ncandidates; ++k) {
             HeadToHead result;
-            head_to_head(i, k, result);
+            result.resolve(i, k);
             LOG(" "<<candidates[result.winner_].name_<<" ("<<result.winner_votes_<<") > "
                 <<candidates[result.loser_].name_<<" ("<<result.loser_votes_<<")");
             ++wins[result.winner_];
@@ -1969,6 +2048,7 @@ template<> void ElectoralMethod<Borda>::find_winner(
 }
 
 /**
+find the approval winner.
 use the approvals stored when the bloc was created.
 **/
 template<> void ElectoralMethod<Approval>::find_winner(
@@ -2263,6 +2343,81 @@ template<> void ElectoralMethod<InstantRunoff>::find_winner(
 }
 
 /**
+find the plurality runoff winner.
+if there is no majority, then the top two go head to head.
+**/
+template<> void ElectoralMethod<PluralityRunoff>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** clear the counts. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** sum the votes. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        int first = rankings[0];
+        counts[first] += bloc.size_;
+    }
+
+    /** find the winner. **/
+    winner_ = -1;
+    int votes = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int count = counts[i];
+        if (count > votes) {
+            winner_ = i;
+            votes = count;
+        }
+    }
+
+    /** go to the runoff if no majority. **/
+    if (2*votes <= nvoters) {
+        /** remove the winner from the counts. **/
+        counts[winner_] = 0;
+
+        /** find the second place finisher. **/
+        int second = -1;
+        votes = -1;
+        for (int i = 0; i < ncandidates; ++i) {
+            int count = counts[i];
+            if (count > votes) {
+                second = i;
+                votes = count;
+            }
+        }
+
+        /** find the head to head winner. **/
+        HeadToHead runoff;
+        runoff.resolve(winner_, second);
+
+        /** overwrite the winner. **/
+        winner_ = runoff.winner_;
+    }
+
+    /** accumulate the utility. **/
+    auto& candidate = candidates[winner_];
+    total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
+}
+
+/**
 find the plurality winner.
 **/
 template<> void ElectoralMethod<Plurality>::find_winner(
@@ -2345,82 +2500,6 @@ template<> void ElectoralMethod<CandidateMethod>::find_winner(
             winner_ = i;
             max = utility;
         }
-    }
-
-    /** accumulate the utility. **/
-    auto& candidate = candidates[winner_];
-    total_utility_ += candidate.utility_;
-
-    /** accumulate correlations. **/
-    if (winner_ == g_impl->guthrie_.winner_) {
-        ++is_winner_;
-    }
-}
-
-
-/**
-find the plurality runoff winner.
-if there is no majority, then the top two go head to head.
-**/
-template<> void ElectoralMethod<PluralityRunoff>::find_winner(
-    bool /*quiet*/
-) noexcept {
-    int ncandidates = g_impl->ncandidates_;
-    auto& candidates = g_impl->candidates_;
-    auto& bloc_map = g_impl->bloc_map_;
-    int nvoters = g_impl->electorate_.nvoters_;
-
-    std::vector<int> counts;
-    counts.reserve(ncandidates);
-    counts.resize(ncandidates);
-
-    /** clear the counts. **/
-    for (int i = 0; i < ncandidates; ++i) {
-        counts[i] = 0;
-    }
-
-    /** sum the votes. **/
-    for (auto&& it : bloc_map) {
-        auto& rankings = it.first;
-        auto& bloc = it.second;
-
-        int first = rankings[0];
-        counts[first] += bloc.size_;
-    }
-
-    /** find the winner. **/
-    winner_ = -1;
-    int votes = -1;
-    for (int i = 0; i < ncandidates; ++i) {
-        int count = counts[i];
-        if (count > votes) {
-            winner_ = i;
-            votes = count;
-        }
-    }
-
-    /** go to the runoff if no majority. **/
-    if (2*votes <= nvoters) {
-        /** remove the winner from the counts. **/
-        counts[winner_] = 0;
-
-        /** find the second place finisher. **/
-        int second = -1;
-        votes = -1;
-        for (int i = 0; i < ncandidates; ++i) {
-            int count = counts[i];
-            if (count > votes) {
-                second = i;
-                votes = count;
-            }
-        }
-
-        /** find the head to head winner. **/
-        HeadToHead runoff;
-        head_to_head(winner_, second, runoff);
-
-        /** overwrite the winner. **/
-        winner_ = runoff.winner_;
     }
 
     /** accumulate the utility. **/
