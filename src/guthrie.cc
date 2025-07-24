@@ -217,6 +217,7 @@ anti-plurality - winner has fewest last place votes.
 bucklin - while no greatest majority, accumulate next choice counts.
 dispersion
 average utilities then calculate satisfactions instead of vice versa.
+two round plurality - top 2 pluralities go head to head.
 
 things in progress:
 
@@ -224,11 +225,13 @@ things to do:
 
 - non-linear utility or piece-wise linear utility.
 - account for candidate quality. this is a random adjustment to utility.
+- weight utilities for satisfaction computation.
+an election of all near-clones contributes less.
+an election with high spread contributes more.
 
 voting systems to consider adding:
 
 majority judgement voting - winner has the largest median utility.
-two round plurality - top 2 pluralities go head to head.
 two round approval - top 2 vote getters go head to head.
 star - score candidates 0 to 5.
 the winner has one of the top two highest total scores and...
@@ -494,6 +497,7 @@ TemplateSpecializaationOfMemberFunctionOutsideClass(Bucklin);
 TemplateSpecializaationOfMemberFunctionOutsideClass(InstantRunoff);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Plurality);
 TemplateSpecializaationOfMemberFunctionOutsideClass(CandidateMethod);
+TemplateSpecializaationOfMemberFunctionOutsideClass(PluralityRunoff);
 /**
 to do:
 MajorityJudgement
@@ -535,6 +539,7 @@ public:
     ElectoralMethod<Bucklin> bucklin_;
     ElectoralMethod<AntiPlurality> anti_plurality_;
     ElectoralMethod<InstantRunoff> instant_runoff_;
+    ElectoralMethod<PluralityRunoff> plurality_runoff_;
     ElectoralMethod<Plurality> plurality_;
     ElectoralMethod<CandidateMethod> candidate_;
 
@@ -1295,6 +1300,7 @@ public:
         bucklin_.find_winner();
         anti_plurality_.find_winner();
         instant_runoff_.find_winner();
+        plurality_runoff_.find_winner();
         plurality_.find_winner();
         candidate_.find_winner();
 
@@ -1303,36 +1309,6 @@ public:
 
         if (guthrie_.winner_ == max_satisfaction) {
             ++winner_maximizes_satisfaction_;
-        }
-        if (guthrie_.winner_ == range_.winner_) {
-            ++range_.is_winner_;
-        }
-        if (guthrie_.winner_ == condorcet_.winner_) {
-            ++condorcet_.is_winner_;
-        }
-        if (guthrie_.winner_ == condorcet_loser_) {
-            ++condorcet_is_loser_;
-        }
-        if (guthrie_.winner_ == borda_.winner_) {
-            ++borda_.is_winner_;
-        }
-        if (guthrie_.winner_ == approval_.winner_) {
-            ++approval_.is_winner_;
-        }
-        if (guthrie_.winner_ == bucklin_.winner_) {
-            ++bucklin_.is_winner_;
-        }
-        if (guthrie_.winner_ == anti_plurality_.winner_) {
-            ++anti_plurality_.is_winner_;
-        }
-        if (guthrie_.winner_ == instant_runoff_.winner_) {
-            ++instant_runoff_.is_winner_;
-        }
-        if (guthrie_.winner_ == plurality_.winner_) {
-            ++plurality_.is_winner_;
-        }
-        if (guthrie_.winner_ == candidate_.winner_) {
-            ++candidate_.is_winner_;
         }
         if (guthrie_.winner_ == independence) {
             ++independence_;
@@ -1392,6 +1368,8 @@ public:
         LOG("Anti-plurality winner       : "<<candidates_[anti_plurality_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, instant_runoff_.winner_);
         LOG("Instant runoff winner       : "<<candidates_[instant_runoff_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, plurality_runoff_.winner_);
+        LOG("Plurality runoff winner     : "<<candidates_[plurality_runoff_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, plurality_.winner_);
         LOG("Plurality winner            : "<<candidates_[plurality_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, candidate_.winner_);
@@ -1522,7 +1500,8 @@ public:
         double average_approval = approval_.total_utility_ / denom;
         double average_bucklin = bucklin_.total_utility_ / denom;
         double average_anti_plurality = anti_plurality_.total_utility_ / denom;
-        double average_instant = instant_runoff_.total_utility_ / denom;
+        double average_instant_runoff = instant_runoff_.total_utility_ / denom;
+        double average_plurality_runoff = plurality_runoff_.total_utility_ / denom;
         double average_plurality = plurality_.total_utility_ / denom;
         double average_candidate = candidate_.total_utility_ / denom;
         double satisfaction = calculate_satisfaction(average_utility, accumulated_);
@@ -1532,7 +1511,8 @@ public:
         double satisfaction_approval = calculate_satisfaction(average_approval, accumulated_);
         double satisfaction_bucklin = calculate_satisfaction(average_bucklin, accumulated_);
         double satisfaction_anti_plurality = calculate_satisfaction(average_anti_plurality, accumulated_);
-        double satisfaction_instant = calculate_satisfaction(average_instant, accumulated_);
+        double satisfaction_instant_runoff = calculate_satisfaction(average_instant_runoff, accumulated_);
+        double satisfaction_plurality_runoff = calculate_satisfaction(average_plurality_runoff, accumulated_);
         double satisfaction_plurality = calculate_satisfaction(average_plurality, accumulated_);
         double satisfaction_candidate = calculate_satisfaction(average_candidate, accumulated_);
 
@@ -1548,7 +1528,8 @@ public:
         double is_approval = 100.0 * double(approval_.is_winner_) / denom;
         double is_bucklin = 100.0 * double(bucklin_.is_winner_) / denom;
         double is_anti_plurality = 100.0 * double(anti_plurality_.is_winner_) / denom;
-        double is_instant = 100.0 * double(instant_runoff_.is_winner_) / denom;
+        double is_instant_runoff = 100.0 * double(instant_runoff_.is_winner_) / denom;
+        double is_plurality_runoff = 100.0 * double(plurality_runoff_.is_winner_) / denom;
         double is_plurality = 100.0 * double(plurality_.is_winner_) / denom;
         double is_candidate = 100.0 * double(candidate_.is_winner_) / denom;
         double is_condorcet_loser = 100.0 * double(condorcet_is_loser_) / denom;
@@ -1568,7 +1549,8 @@ public:
         LOG(" approval                     : "<<satisfaction_approval);
         LOG(" Bucklin                      : "<<satisfaction_bucklin);
         LOG(" anti-plurality               : "<<satisfaction_anti_plurality);
-        LOG(" instant                      : "<<satisfaction_instant);
+        LOG(" instant runoff               : "<<satisfaction_instant_runoff);
+        LOG(" plurality runoff             : "<<satisfaction_plurality_runoff);
         LOG(" plurality                    : "<<satisfaction_plurality);
         LOG("Guthrie correlations by method:");
         LOG(" range                        : "<<is_range<<"%");
@@ -1577,7 +1559,8 @@ public:
         LOG(" approval                     : "<<is_approval<<"%");
         LOG(" Bucklin                      : "<<is_bucklin<<"%");
         LOG(" anti-plurality               : "<<is_anti_plurality<<"%");
-        LOG(" instant                      : "<<is_instant<<"%");
+        LOG(" instant runoff               : "<<is_instant_runoff<<"%");
+        LOG(" plurality runoff             : "<<is_plurality_runoff<<"%");
         LOG(" plurality                    : "<<is_plurality<<"%");
         LOG("Miscellaneous                 :");
         LOG(" Candidate satisfaction       : "<<satisfaction_candidate);
@@ -1773,6 +1756,11 @@ template<> void ElectoralMethod<Range>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 class HeadToHead {
@@ -1920,6 +1908,11 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
     double utility = total_utility / double(nwinners);
     total_utility_ += utility;
 
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
+
     /** return results. **/
     g_impl->condorcet_loser_ = loser;
 }
@@ -1968,6 +1961,11 @@ template<> void ElectoralMethod<Borda>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
@@ -2024,6 +2022,11 @@ template<> void ElectoralMethod<Approval>::find_winner(
 
     /** accumulate the utility. **/
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
@@ -2069,6 +2072,11 @@ template<> void ElectoralMethod<AntiPlurality>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
@@ -2125,6 +2133,11 @@ template<> void ElectoralMethod<Bucklin>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 class RankedChoice {
@@ -2242,6 +2255,11 @@ template<> void ElectoralMethod<InstantRunoff>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
@@ -2292,6 +2310,11 @@ template<> void ElectoralMethod<Plurality>::find_winner(
     if (2*votes > nvoters) {
         ++g_impl->majority_winners_;
     }
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
@@ -2327,6 +2350,87 @@ template<> void ElectoralMethod<CandidateMethod>::find_winner(
     /** accumulate the utility. **/
     auto& candidate = candidates[winner_];
     total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
+}
+
+
+/**
+find the plurality runoff winner.
+if there is no majority, then the top two go head to head.
+**/
+template<> void ElectoralMethod<PluralityRunoff>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+    int nvoters = g_impl->electorate_.nvoters_;
+
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** clear the counts. **/
+    for (int i = 0; i < ncandidates; ++i) {
+        counts[i] = 0;
+    }
+
+    /** sum the votes. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        int first = rankings[0];
+        counts[first] += bloc.size_;
+    }
+
+    /** find the winner. **/
+    winner_ = -1;
+    int votes = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int count = counts[i];
+        if (count > votes) {
+            winner_ = i;
+            votes = count;
+        }
+    }
+
+    /** go to the runoff if no majority. **/
+    if (2*votes <= nvoters) {
+        /** remove the winner from the counts. **/
+        counts[winner_] = 0;
+
+        /** find the second place finisher. **/
+        int second = -1;
+        votes = -1;
+        for (int i = 0; i < ncandidates; ++i) {
+            int count = counts[i];
+            if (count > votes) {
+                second = i;
+                votes = count;
+            }
+        }
+
+        /** find the head to head winner. **/
+        HeadToHead runoff;
+        head_to_head(winner_, second, runoff);
+
+        /** overwrite the winner. **/
+        winner_ = runoff.winner_;
+    }
+
+    /** accumulate the utility. **/
+    auto& candidate = candidates[winner_];
+    total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 } // anonymous namespace
