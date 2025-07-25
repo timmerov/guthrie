@@ -284,6 +284,7 @@ constexpr int kNCandidates = 4;
 //constexpr int kNCandidates = 5;
 //constexpr int kNCandidates = 6;
 //constexpr int kNCandidates = 7;
+//constexpr int kNCandidates = 9;
 
 /** options for distributing the electorate. **/
 //constexpr int kElectorateMethod = kElectorateUniform;
@@ -295,8 +296,8 @@ constexpr int kNClusters = kNCandidates * 2;
 
 /** options for number of issue dimensions (axes). **/
 //constexpr int kNAxes = 1;
-//constexpr int kNAxes = 2;
-constexpr int kNAxes = 3;
+constexpr int kNAxes = 2;
+//constexpr int kNAxes = 3;
 
 /**
 option for relative weighting of the axes.
@@ -311,8 +312,8 @@ which seems to be the case.
 and they are all equally important.
 which seems a bit of a stretch.
 **/
-//constexpr double kAxisWeightDecay = 0.4;
-constexpr double kAxisWeightDecay = 1.0;
+constexpr double kAxisWeightDecay = 0.4;
+//constexpr double kAxisWeightDecay = 1.0;
 
 /** options for choosing candidates **/
 constexpr int kCandidatesRandom = 0;
