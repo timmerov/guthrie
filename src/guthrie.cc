@@ -311,7 +311,8 @@ which seems to be the case.
 and they are all equally important.
 which seems a bit of a stretch.
 **/
-constexpr double kAxisWeightDecay = 0.4;
+//constexpr double kAxisWeightDecay = 0.4;
+constexpr double kAxisWeightDecay = 1.0;
 
 /** options for choosing candidates **/
 constexpr int kCandidatesRandom = 0;
@@ -347,8 +348,8 @@ constexpr double kDispersion = 0.7;
 //constexpr double kDispersion = 0.3;
 
 /** option to use a fixed seed for testing. **/
-constexpr std::uint64_t kSeedChoice = 0;
-//constexpr std::uint64_t kSeedChoice = 1752039337855143834;
+//constexpr std::uint64_t kSeedChoice = 0;
+constexpr std::uint64_t kSeedChoice = 1753391226898898129;
 
 /**
 option to use approval votes to find guthrie winner.
@@ -554,6 +555,7 @@ public:
     int condorcet_loser_ = 0;
     int condorcet_is_loser_ = 0;
     int condorcet_cycles_ = 0;
+    int candidate_cycles_ = 0;
     int independence_ = 0;
 
     void run() noexcept {
@@ -1307,6 +1309,12 @@ public:
         plurality_.find_winner();
         candidate_.find_winner();
 
+        /** check for candidate rankings for cycle. **/
+        int candidate_cycle = check_candidate_rankings_for_cycles();
+        if (candidate_cycle) {
+            ++candidate_cycles_;
+        }
+
         /** caution: this destroys the bloc map. **/
         int independence = check_independence();
 
@@ -1404,6 +1412,64 @@ public:
         total_utility_ += winning_candidate.utility_;
 
         return winner;
+    }
+
+    /**
+    check the candidate rankings for a condorcet cycle.
+    **/
+    int check_candidate_rankings_for_cycles() noexcept {
+        /** ensure the candidate rankings are correct. **/
+        rank_candidates(true);
+
+        /** initialize number of wins for each candidate. **/
+        std::vector<int> wins;
+        wins.reserve(ncandidates_);
+        wins.resize(ncandidates_);
+        for (int i = 0; i < ncandidates_; ++i) {
+            wins[i] = 0;
+        }
+
+        /** for every candidate pairing. **/
+        for (int i = 0; i < ncandidates_; ++i) {
+            for (int k = i + 1; k < ncandidates_; ++k) {
+                /** count the votes of every candidate. **/
+                int ivotes = 0;
+                int kvotes = 0;
+                for (auto&& candidate : candidates_) {
+                    for (int p = 0; p < ncandidates_; ++p) {
+                        int which = candidate.rankings_[p];
+                        if (which == i) {
+                            ++ivotes;
+                            break;
+                        }
+                        if (which == k) {
+                            ++kvotes;
+                            break;
+                        }
+                    }
+                }
+                if (ivotes > kvotes) {
+                    ++wins[i];
+                }
+                if (kvotes > ivotes) {
+                    ++wins[k];
+                }
+            }
+        }
+
+        /**
+        find the undefeated candidate.
+        **/
+        int max_wins = ncandidates_ - 1;
+        for (int i = 0; i < ncandidates_; ++i) {
+            if (wins[i] == max_wins) {
+                LOG("Candidate "<<i<<" is undefeated.");
+                return false;
+            }
+        }
+
+        LOG("Candidate rankings form a cycle.");
+        return true;
     }
 
     /**
@@ -1544,6 +1610,7 @@ public:
         double independence = 100.0 * double(independence_) / denom;
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
+        double candidate_cycles = 100.0 * double(candidate_cycles_) / denom;
 
         LOG("");
         show_header();
@@ -1580,6 +1647,7 @@ public:
         LOG(" Won by majority              : "<<majority_winners<<"%");
         LOG(" Condorcet loser wins         : "<<is_condorcet_loser<<"%");
         LOG(" Condorcet cycles             : "<<condorcet_cycles<<"%");
+        LOG(" Candidate cycles             : "<<candidate_cycles<<"%");
     }
 };
 
