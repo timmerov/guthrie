@@ -219,6 +219,7 @@ dispersion
 average utilities then calculate satisfactions instead of vice versa.
 two round plurality - top 2 pluralities go head to head.
 two round approval - top 2 vote getters go head to head.
+coombs' method.
 
 things in progress:
 
@@ -229,6 +230,7 @@ things to do:
 - weight utilities for satisfaction computation.
 an election of all near-clones contributes less.
 an election with high spread contributes more.
+- asymmetric utility we assume U(A,B)=U(B,A) but irl it might not.
 
 voting systems to consider adding:
 
@@ -237,6 +239,8 @@ star - score candidates 0 to 5.
 the winner has one of the top two highest total scores and...
 is scored higher than the the other finalist on more ballots.
 ranked robin - condorcet but voters can give candidates equal ranking.
+instant pairwise elimination ipe - eliminate the condorcet loser each round.
+with tie breaker rules. https://electowiki.org/wiki/Instant_Pairwise_Elimination
 
 other voting systems worth mentioning:
 smith methods - condorcet completion.
@@ -349,8 +353,8 @@ constexpr double kDispersion = 0.7;
 //constexpr double kDispersion = 0.3;
 
 /** option to use a fixed seed for testing. **/
-//constexpr std::uint64_t kSeedChoice = 0;
-constexpr std::uint64_t kSeedChoice = 1753391226898898129;
+constexpr std::uint64_t kSeedChoice = 0;
+//constexpr std::uint64_t kSeedChoice = 1753391226898898129;
 
 /**
 option to use approval votes to find guthrie winner.
@@ -495,6 +499,7 @@ TemplateSpecializaationOfMemberFunctionOutsideClass(Range);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Condorcet);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Borda);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Approval);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Coombs);
 TemplateSpecializaationOfMemberFunctionOutsideClass(AntiPlurality);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Bucklin);
 TemplateSpecializaationOfMemberFunctionOutsideClass(InstantRunoff);
@@ -540,6 +545,7 @@ public:
     ElectoralMethod<Condorcet> condorcet_;
     ElectoralMethod<Borda> borda_;
     ElectoralMethod<Approval> approval_;
+    ElectoralMethod<Coombs> coombs_;
     ElectoralMethod<Bucklin> bucklin_;
     ElectoralMethod<AntiPlurality> anti_plurality_;
     ElectoralMethod<InstantRunoff> instant_runoff_;
@@ -558,6 +564,7 @@ public:
     int condorcet_cycles_ = 0;
     int candidate_cycles_ = 0;
     int independence_ = 0;
+    int irv_is_condorcet_ = 0;
 
     void run() noexcept {
         /** grant global access to our data. **/
@@ -1303,6 +1310,7 @@ public:
         condorcet_.find_winner();
         borda_.find_winner();
         approval_.find_winner();
+        coombs_.find_winner();
         bucklin_.find_winner();
         anti_plurality_.find_winner();
         instant_runoff_.find_winner();
@@ -1360,6 +1368,13 @@ public:
             loser = condorcet_loser_;
         }
 
+        /** check if the irv winner picks the condorcet winner. **/
+        if (condorcet_.winner_ >= 0) {
+            if (instant_runoff_.winner_ == condorcet_.winner_) {
+                ++irv_is_condorcet_;
+            }
+        }
+
         LOG("");
         LOG("Voting criteria results:");
         const char *result = nullptr;
@@ -1376,6 +1391,8 @@ public:
         LOG("Borda winner                : "<<candidates_[borda_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, approval_.winner_);
         LOG("Approval winner             : "<<candidates_[approval_.winner_].name_<<" "<<result);
+        result = result_to_string(guthrie_.winner_, coombs_.winner_);
+        LOG("Coombs winner               : "<<candidates_[coombs_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, bucklin_.winner_);
         LOG("Bucklin winner              : "<<candidates_[bucklin_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, anti_plurality_.winner_);
@@ -1571,6 +1588,7 @@ public:
         double average_condorcet = condorcet_.total_utility_ / denom;
         double average_borda = borda_.total_utility_ / denom;
         double average_approval = approval_.total_utility_ / denom;
+        double average_coombs = coombs_.total_utility_ / denom;
         double average_bucklin = bucklin_.total_utility_ / denom;
         double average_anti_plurality = anti_plurality_.total_utility_ / denom;
         double average_instant_runoff = instant_runoff_.total_utility_ / denom;
@@ -1583,6 +1601,7 @@ public:
         double satisfaction_condorcet = calculate_satisfaction(average_condorcet, accumulated_);
         double satisfaction_borda = calculate_satisfaction(average_borda, accumulated_);
         double satisfaction_approval = calculate_satisfaction(average_approval, accumulated_);
+        double satisfaction_coombs = calculate_satisfaction(average_coombs, accumulated_);
         double satisfaction_bucklin = calculate_satisfaction(average_bucklin, accumulated_);
         double satisfaction_anti_plurality = calculate_satisfaction(average_anti_plurality, accumulated_);
         double satisfaction_instant_runoff = calculate_satisfaction(average_instant_runoff, accumulated_);
@@ -1601,6 +1620,7 @@ public:
         double is_condorcet_max = 100.0 * double(condorcet_.is_winner_) / non_cycle_trials;
         double is_borda = 100.0 * double(borda_.is_winner_) / denom;
         double is_approval = 100.0 * double(approval_.is_winner_) / denom;
+        double is_coombs = 100.0 * double(coombs_.is_winner_) / denom;
         double is_bucklin = 100.0 * double(bucklin_.is_winner_) / denom;
         double is_anti_plurality = 100.0 * double(anti_plurality_.is_winner_) / denom;
         double is_instant_runoff = 100.0 * double(instant_runoff_.is_winner_) / denom;
@@ -1612,18 +1632,20 @@ public:
         double majority_winners = 100.0 * double(majority_winners_) / denom;
         double condorcet_cycles = 100.0 * double(condorcet_cycles_) / denom;
         double candidate_cycles = 100.0 * double(candidate_cycles_) / denom;
+        double irv_is_condorcet = 100.0 * double(irv_is_condorcet_) / non_cycle_trials;
 
         LOG("");
         show_header();
         LOG("");
         LOG("Summary:");
-        LOG("Voter Satisfactions by method :");
+        LOG("voter satisfactions by method :");
         LOG(" Guthrie (strategic)          : "<<satisfaction<<" ("<<satisfaction_strategic<<")");
         LOG(" approval runoff              : "<<satisfaction_approval_runoff);
         LOG(" range                        : "<<satisfaction_range);
         LOG(" Condorcet (winner exists)    : "<<satisfaction_condorcet<<" ("<<satisfaction_ordering<<")");
         LOG(" Borda                        : "<<satisfaction_borda);
         LOG(" approval                     : "<<satisfaction_approval);
+        LOG(" Coombs                       : "<<satisfaction_coombs);
         LOG(" Bucklin                      : "<<satisfaction_bucklin);
         LOG(" anti-plurality               : "<<satisfaction_anti_plurality);
         LOG(" instant runoff               : "<<satisfaction_instant_runoff);
@@ -1635,20 +1657,22 @@ public:
         LOG(" Condorcet (winner exists)    : "<<is_condorcet_min<<"% ("<<is_condorcet_max<<"%)");
         LOG(" Borda                        : "<<is_borda<<"%");
         LOG(" approval                     : "<<is_approval<<"%");
+        LOG(" Coombs                       : "<<is_coombs<<"%");
         LOG(" Bucklin                      : "<<is_bucklin<<"%");
         LOG(" anti-plurality               : "<<is_anti_plurality<<"%");
         LOG(" instant runoff               : "<<is_instant_runoff<<"%");
         LOG(" plurality runoff             : "<<is_plurality_runoff<<"%");
         LOG(" plurality                    : "<<is_plurality<<"%");
         LOG("Miscellaneous                 :");
-        LOG(" Candidate satisfaction       : "<<satisfaction_candidate);
-        LOG(" Maxes candidate satisfaction : "<<is_candidate<<"%");
-        LOG(" Maxes voter satisfaction     : "<<maximizes_satisfaction<<"%");
-        LOG(" Independence                 : "<<independence<<"%");
-        LOG(" Won by majority              : "<<majority_winners<<"%");
+        LOG(" candidate satisfaction       : "<<satisfaction_candidate);
+        LOG(" maxes candidate satisfaction : "<<is_candidate<<"%");
+        LOG(" maxes voter satisfaction     : "<<maximizes_satisfaction<<"%");
+        LOG(" independence                 : "<<independence<<"%");
+        LOG(" won by majority              : "<<majority_winners<<"%");
         LOG(" Condorcet loser wins         : "<<is_condorcet_loser<<"%");
         LOG(" Condorcet cycles             : "<<condorcet_cycles<<"%");
-        LOG(" Candidate cycles             : "<<candidate_cycles<<"%");
+        LOG(" candidate cycles             : "<<candidate_cycles<<"%");
+        LOG(" instant runoff is Condorcet  : "<<irv_is_condorcet<<"%");
     }
 };
 
@@ -2178,6 +2202,114 @@ template<> void ElectoralMethod<Approval>::find_winner(
     }
 }
 
+class RankedChoice {
+public:
+    Rankings rankings_;
+    int size_;
+};
+typedef std::vector<RankedChoice> RankedChoices;
+
+/**
+find the coombs winner.
+**/
+template<> void ElectoralMethod<Coombs>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+
+    winner_ = -1;
+
+    /** copy the voter blocs. **/
+    int nblocs = bloc_map.size();
+    RankedChoices ranked_choices;
+    ranked_choices.reserve(nblocs);
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+
+        RankedChoice ranked_choice;
+        ranked_choice.rankings_ = rankings;
+        ranked_choice.size_ = bloc.size_;
+        ranked_choices.push_back(std::move(ranked_choice));
+    }
+
+    /** allocate vote counts. **/
+    std::vector<int> counts;
+    counts.reserve(ncandidates);
+    counts.resize(ncandidates);
+
+    /** initialize a list of elligible candidates. **/
+    std::vector<int> elligible;
+    elligible.reserve(ncandidates);
+    elligible.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        elligible[i] = i;
+    }
+
+    /** repeat until we have a winner. **/
+    for (int nc = ncandidates; nc > 1; --nc) {
+        /** clear the vote counts. **/
+        for (int i = 0; i < ncandidates; ++i) {
+            counts[i] = 0;
+        }
+
+        /** count the last place votes. **/
+        int ix = nc - 1;
+        for (auto&& rc : ranked_choices) {
+            int which = rc.rankings_[ix];
+            counts[which] += rc.size_;
+        }
+
+        /** find the candidates with the most last place votes. **/
+        int loser = -1;
+        int max = -1;
+        for (int i = 0; i < nc; ++i) {
+            int which = elligible[i];
+            int count = counts[which];
+            /** by rule, last in the list loses ties. **/
+            if (max <= count) {
+                loser = which;
+                max = count;
+            }
+        }
+
+        /** remove the loser from the rankings. **/
+        for (auto&& rc : ranked_choices) {
+            auto& rankings = rc.rankings_;
+            for (int i = 0; i < nc; ++i) {
+                int which = rankings[i];
+                if (which == loser) {
+                    rankings.erase(rankings.begin() + i);
+                    break;
+                }
+            }
+        }
+
+        /** remove the loser from the candidate list. **/
+        for (int i = 0; i < nc; ++i) {
+            int which = elligible[i];
+            if (which == loser) {
+                elligible.erase(elligible.begin() + i);
+                break;
+            }
+        }
+    }
+
+    /** winner is the last elligible candidate. **/
+    winner_ = elligible[0];
+
+    /** accumulate the utility. **/
+    auto& candidate = candidates[winner_];
+    total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
+}
+
 /**
 find the anti-plurality winner.
 **/
@@ -2288,13 +2420,6 @@ template<> void ElectoralMethod<Bucklin>::find_winner(
         ++is_winner_;
     }
 }
-
-class RankedChoice {
-public:
-    Rankings rankings_;
-    int size_;
-};
-typedef std::vector<RankedChoice> RankedChoices;
 
 /**
 instant runoff voting.
