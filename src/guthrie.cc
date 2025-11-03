@@ -242,7 +242,10 @@ ranked robin - condorcet but voters can give candidates equal ranking.
 instant pairwise elimination ipe - eliminate the condorcet loser each round.
 with tie breaker rules. https://electowiki.org/wiki/Instant_Pairwise_Elimination
 semi-random voting - pick a ballot at ranodm. presumably this motivates honest voting.
-choose a winner by some good method that's subject to strategic voting. run-off between the two.
+choose a winner by some good method that's subject to strategic voting.
+run-off between the two.
+bottom two - irv but the two candidates with the fewest first place votes go head to head.
+loser eliminated.
 
 other voting systems worth mentioning:
 smith methods - condorcet completion.
