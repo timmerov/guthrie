@@ -42,6 +42,7 @@ public:
     ~VotingSurveyImpl() = default;
 
     std::vector<std::string> method_names_;
+    int longest_name_ = 0;
     std::string buffer_;
     std::stringstream sheet_;
     std::stringstream cells_;
@@ -81,6 +82,12 @@ public:
         method_names_.push_back("Guthrie");
         method_names_.push_back("InstantRunoff");
         method_names_.push_back("Score");
+
+        /** find the longest name for formatting. **/
+        for (auto &&name : method_names_) {
+            int len = name.size();
+            longest_name_ = std::max(longest_name_, len);
+        }
 
         /** load the data from the google sheet. **/
         loadSurveyDataFromGoogleSheet();
@@ -325,12 +332,12 @@ public:
     }
 
     void analyzeApproval() noexcept {
-        LOG("Results by Approval Voting:");
+        LOG("Results by Approval Voting (approvals):");
         int winner = -1;
         int max_count = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int count = approval_counts_[method];
-            LOG("  "<<method_names_[method]<<": "<<count);
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
             if (max_count < count) {
                 max_count = count;
                 winner = method;
@@ -341,12 +348,12 @@ public:
     }
 
     void analyzeBordaCount() noexcept {
-        LOG("Results by Borda Count:");
+        LOG("Results by Borda Count (totals):");
         int winner = -1;
         int max_count = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int count = borda_counts_[method];
-            LOG("  "<<method_names_[method]<<": "<<count);
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count<<" total");
             if (max_count < count) {
                 max_count = count;
                 winner = method;
@@ -357,7 +364,7 @@ public:
     }
 
     void analyzeBucklin() noexcept {
-        LOG("Results by Bucklin Voting:");
+        LOG("Results by Bucklin Voting (approvals):");
         int winner = -1;
         int leader = -1;
         for (int round = 0; round < kNumMethods; ++round) {
@@ -365,7 +372,7 @@ public:
             int max_count = -1;
             for (int method = 0; method < kNumMethods; ++method) {
                 int count = bucklin_counts_[method][round];
-                LOG("    "<<method_names_[method]<<": "<<count);
+                LOG("    "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
                 if (max_count < count) {
                     max_count = count;
                     leader = method;
@@ -384,35 +391,49 @@ public:
     }
 
     void analyzeCondorcet() noexcept {
-        LOG("Results by Condorcet:");
+        LOG("Results by Condorcet (wins):");
 
         int wins[kNumMethods];
         for (int method = 0; method < kNumMethods; ++method) {
             wins[method] = 0;
         }
 
+        /** for every possible pairing. **/
         for (int method_a = 0; method_a < kNumMethods; ++method_a) {
             for (int method_b = method_a + 1; method_b < kNumMethods; ++method_b) {
+                /** count ballots ranking a higher than b and vice versa. **/
+                int count_a = 0;
+                int count_b = 0;
                 for (auto &&ballot : condorcet_ballots_) {
                     int rank_a = ballot.rankings_[method_a];
                     int rank_b = ballot.rankings_[method_b];
-                    if (rank_a > rank_b) {
-                        ++wins[rank_a];
-                    } else if (rank_b > rank_a) {
-                        ++wins[rank_b];
+                    if (rank_a < rank_b) {
+                        ++count_a;
+                    } else if (rank_b < rank_a) {
+                        ++count_b;
                     }
                 }
+                /** update wins. **/
+                if (count_a > count_b) {
+                    ++wins[method_a];
+                } else if (count_b > count_a) {
+                    ++wins[method_b];
+                }
+
+                LOG("    "<<method_names_[method_a]<<"["<<count_a<<"] vs "
+                    <<method_names_[method_b]<<"["<<count_b<<"]");
             }
         }
 
-        static constexpr int kNeededWins = (kNumMethods + 1) / 2;
+        /** the the method that wins against all other methods. **/
+        static constexpr int kNeededWins = kNumMethods - 1;
         int winner = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int w = wins[method];
             if (w >= kNeededWins) {
                 winner = method;
             }
-            LOG("  "<<method_names_[method]<<": "<<w);
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<w);
         }
 
         if (winner >= 0) {
@@ -424,12 +445,12 @@ public:
     }
 
     void analyzeGuthrie() noexcept {
-        LOG("Results by Guthrie Voting:");
+        LOG("Results by Guthrie Voting (votes):");
         int winner = -1;
         int max_count = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int count = guthrie_counts_[method];
-            LOG("  "<<method_names_[method]<<": "<<count);
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
             if (max_count < count) {
                 max_count = count;
                 winner = method;
@@ -445,7 +466,7 @@ public:
     }
 
     void analyzeInstantRunoff() noexcept {
-        LOG("Results by Instant Runoff Voting:");
+        LOG("Results by Instant Runoff Voting (votes):");
         int winner = -1;
         for (int round = 1; round <= kNumRounds; ++round) {
             LOG("  Round["<<round<<"]:");
@@ -472,7 +493,7 @@ public:
             int min_count = 1000;
             for (int method = 0; method < kNumMethods; ++method) {
                 int count = counts[method];
-                LOG("    "<<method_names_[method]<<": "<<count);
+                LOG("    "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
                 if (max_count < count) {
                     max_count = count;
                     winner = method;
@@ -509,12 +530,12 @@ public:
     }
 
     void analyzeScore() noexcept {
-        LOG("Results by Score Voting:");
+        LOG("Results by Score Voting (total):");
         int winner = -1;
         int max_total = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int total = score_totals_[method];
-            LOG("  "<<method_names_[method]<<": "<<total);
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<total);
             if (max_total < total) {
                 max_total = total;
                 winner = method;
@@ -529,9 +550,9 @@ public:
         for (int i = 0; i < kNumMethods; ++i) {
             int winner = winners_[i];
             if (winner >= 0) {
-                LOG("  Method["<<method_names_[i]<<"]: "<<method_names_[winner]);
+                LOG("  Method["<<std::left<<std::setw(longest_name_)<<method_names_[i]<<"]: "<<method_names_[winner]);
             } else {
-                LOG("  Method["<<method_names_[i]<<"]: tbd");
+                LOG("  Method["<<std::left<<std::setw(longest_name_)<<method_names_[i]<<"]: tbd");
             }
         }
     }
