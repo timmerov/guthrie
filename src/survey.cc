@@ -80,7 +80,7 @@ public:
         method_names_.push_back("Bucklin");
         method_names_.push_back("Condorcet");
         method_names_.push_back("Guthrie");
-        method_names_.push_back("InstantRunoff");
+        method_names_.push_back("Instant Runoff");
         method_names_.push_back("Score");
 
         /** find the longest name for formatting. **/
@@ -157,7 +157,7 @@ public:
         /** read the rows. **/
         int row = 0;
         while (std::getline(sheet_, line_)) {
-            LOG("row["<<row<<"]:");
+            //LOG("row["<<row<<"]:");
             ++row;
             ++num_votes_;
 
@@ -353,7 +353,7 @@ public:
         int max_count = -1;
         for (int method = 0; method < kNumMethods; ++method) {
             int count = borda_counts_[method];
-            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count<<" total");
+            LOG("  "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
             if (max_count < count) {
                 max_count = count;
                 winner = method;
