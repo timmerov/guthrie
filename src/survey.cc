@@ -6,6 +6,7 @@ Copyright (C) 2012-2025 tim cotter. All rights reserved.
 #include <curl/curl.h>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 #include <aggiornamento/aggiornamento.h>
 #include <aggiornamento/log.h>
@@ -16,14 +17,23 @@ namespace {
 
 static constexpr char kVotingSurveyUrl[] = "https://docs.google.com/spreadsheets/d/11CS8R4pbYFDQcHaXjGxAquIuVWzb8vjciY_fS-Tz_Rk/export?format=tsv&gid=2041703740";
 
-enum class Method {
+enum Method {
     kApproval,
     kBordaCount,
     kBucklin,
     kCondorcet,
     kGuthrie,
     kInstantRunoff,
-    kScore
+    kScore,
+    //
+    kNumMethods
+};
+static constexpr int kNumRounds = kNumMethods;
+static constexpr int kMaxScore = 10;
+
+class Rankings {
+public:
+    int rankings_[kNumMethods];
 };
 
 class VotingSurveyImpl {
@@ -31,76 +41,70 @@ public:
     VotingSurveyImpl() = default;
     ~VotingSurveyImpl() = default;
 
+    std::vector<std::string> method_names_;
     std::string buffer_;
+    std::stringstream sheet_;
+    std::stringstream cells_;
+    std::string line_;
+    std::string s0_;
+    std::string s1_;
+    std::string s2_;
+    std::string s3_;
+    std::string s4_;
+    std::string s5_;
+    std::string s6_;
+
+    int num_votes_ = 0;
+    int majority_ = 0;
+    int winners_[kNumMethods];
+    int approval_counts_[kNumMethods];
+    int borda_counts_[kNumMethods];
+    int bucklin_counts_[kNumMethods][kNumRounds];
+    std::vector<Rankings> condorcet_ballots_;
+    int guthrie_counts_[kNumMethods];
+    std::vector<Rankings> instant_ballots_;
+    int score_totals_[kNumMethods];
 
     void run() noexcept {
+        init();
+        readRows();
+        analyze();
+    }
+
+    void init() noexcept {
+        /** table of method names. **/
+        method_names_.reserve(kNumMethods);
+        method_names_.push_back("Approval");
+        method_names_.push_back("Borda Count");
+        method_names_.push_back("Bucklin");
+        method_names_.push_back("Condorcet");
+        method_names_.push_back("Guthrie");
+        method_names_.push_back("InstantRunoff");
+        method_names_.push_back("Score");
+
+        /** load the data from the google sheet. **/
         loadSurveyDataFromGoogleSheet();
 
-        std::stringstream ss(std::move(buffer_));
+        /** stuff it into a string stream. **/
+        sheet_ = std::stringstream(std::move(buffer_));
         buffer_.clear();
 
         /** skip the first line. **/
-        std::string line;
-        std::getline(ss, line);
+        std::getline(sheet_, line_);
 
-        /** read the rows. **/
-        int row = 0;
-        while (std::getline(ss, line)) {
-            LOG("row["<<row<<"]:");
-            ++row;
+        /** initialize the tallies. **/
+        num_votes_ = 0;
+        majority_ = 0;
+        for (int method = 0; method < kNumMethods; ++method) {
+            winners_[method] = -1;
+            approval_counts_[method] = 0;
+            borda_counts_[method] = 0;
+            guthrie_counts_[method] = 0;
+            score_totals_[method] = 0;
 
-            /** replace spaces with underscores. **/
-            std::replace(line.begin(), line.end(), ' ', '_');
-
-            /** replace empty cells with underscores. **/
-            for(;;) {
-                auto found = line.find("\t\t");
-                if (found == std::string::npos) {
-                    break;
-                }
-                line.replace(found, 2, "\t_\t");
+            for (int round = 0; round < kNumMethods; ++round) {
+                bucklin_counts_[method][round] = 0;
             }
-
-            /** read cells. **/
-            std::stringstream cells(line);
-            std::string s0;
-            std::string s1;
-            std::string s2;
-            std::string s3;
-            std::string s4;
-            std::string s5;
-            std::string s6;
-
-            /** date/time **/
-            cells >> s0;
-
-            /** approval **/
-            cells >> s0;
-            LOG("Approval: "<<s0);
-
-            /** borda count **/
-            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
-            LOG("Borda Count: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
-
-            /** bucklin **/
-            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
-            LOG("Bucklin: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
-
-            /** condorcet **/
-            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
-            LOG("Condorcet: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
-
-            /** guthrie **/
-            cells >> s0;
-            LOG("Guthrie: "<<s0);
-
-            /** instant runoff **/
-            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
-            LOG("Instant Runoff: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
-
-            /** score **/
-            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
-            LOG("Score: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
         }
     }
 
@@ -140,6 +144,396 @@ public:
         auto &buffer = * (std::string *) userp;
         buffer.append((char *) contents, size);
         return size;
+    }
+
+    void readRows() noexcept {
+        /** read the rows. **/
+        int row = 0;
+        while (std::getline(sheet_, line_)) {
+            LOG("row["<<row<<"]:");
+            ++row;
+            ++num_votes_;
+
+            /** replace spaces with underscores. **/
+            std::replace(line_.begin(), line_.end(), ' ', '_');
+
+            /** replace empty cells with underscores. **/
+            for(;;) {
+                auto found = line_.find("\t\t");
+                if (found == std::string::npos) {
+                    break;
+                }
+                line_.replace(found, 2, "\t_\t");
+            }
+
+            /** read cells. **/
+            cells_ = std::stringstream(line_);
+
+            /** date/time **/
+            cells_ >> s0_;
+
+            /** approval **/
+            tallyApproval();
+
+            /** borda count **/
+            tallyBordaCount();
+
+            /** bucklin **/
+            tallyBucklin();
+
+            /** condorcet **/
+            tallyCondorcet();
+
+            /** guthrie **/
+            tallyGuthrie();
+
+            /** instant runoff **/
+            tallyInstantRunoff();
+
+            /** score **/
+            tallyScore();
+        }
+
+        majority_ = (num_votes_ + 1) / 2;
+    }
+
+    void tallyApproval() noexcept {
+        /** the cell contains the names of the method. **/
+        cells_ >> s0_;
+        for (int method = 0; method < kNumMethods; ++method) {
+            auto found = s0_.find(method_names_[method]);
+            if (found != std::string::npos) {
+                ++approval_counts_[method];
+            }
+        }
+    }
+
+    void tallyBordaCount() noexcept {
+        /**
+        the next 7 cells contain the rankings of each method.
+        1 is the highest -> 6 points.
+        7 is the lowest -> 0 points.
+        **/
+        for (int method = 0; method < kNumMethods; ++method) {
+            cells_ >> s0_;
+            int rank = toNumber(s0_);
+            if (rank >= 1 && rank <= kNumMethods) {
+                borda_counts_[method] += kNumMethods - rank;
+            }
+        }
+    }
+
+    void tallyBucklin() noexcept {
+        /**
+        the next 7 cells contain the round each method is approved.
+        the method is approved for every round thereafter.
+        **/
+        for (int method = 0; method < kNumMethods; ++method) {
+            cells_ >> s0_;
+            int first_round = toNumber(s0_);
+            if (first_round >= 1 && first_round < kNumRounds) {
+                for (int round = first_round - 1; round < kNumMethods; ++round) {
+                    ++bucklin_counts_[method][round];
+                }
+            }
+        }
+    }
+
+    void tallyCondorcet() noexcept {
+        /**
+        the next 7 cells contain the rank of each method.
+        **/
+        Rankings r;
+        for (int method = 0; method < kNumMethods; ++method) {
+            cells_ >> s0_;
+            r.rankings_[method] = toNumber(s0_);
+        }
+        condorcet_ballots_.push_back(r);
+    }
+
+    void tallyGuthrie() noexcept {
+        /** the cell contains the name of the method. **/
+        cells_ >> s0_;
+        for (int method = 0; method < kNumMethods; ++method) {
+            auto found = s0_.find(method_names_[method]);
+            if (found != std::string::npos) {
+                ++guthrie_counts_[method];
+                break;
+            }
+        }
+    }
+
+    void tallyInstantRunoff() noexcept {
+        /**
+        the next 7 cells contain the rank of each method.
+        **/
+        Rankings r;
+        for (int method = 0; method < kNumMethods; ++method) {
+            cells_ >> s0_;
+            r.rankings_[method] = toNumber(s0_);
+        }
+        instant_ballots_.push_back(r);
+    }
+
+    void tallyScore() noexcept {
+        /**
+        the next 7 cells contain the score for each method.
+        10 is the highest -> 10 points.
+        0 is the lowest -> 0 points.
+        **/
+        for (int method = 0; method < kNumMethods; ++method) {
+            cells_ >> s0_;
+            int score = toNumber(s0_);
+            if (score >= 0 && score <= kMaxScore) {
+                score_totals_[method] += score;
+            }
+        }
+    }
+
+    /**
+    return the first non-negative integer in a string.
+    skip leading non-digits.
+    **/
+    int toNumber(
+        std::string &str
+    ) noexcept {
+        int len = str.size();
+        int i = 0;
+        for ( ; i < len; ++i) {
+            int ch = str[i];
+            if (ch >= '0' && ch <= '9') {
+                break;
+            }
+        }
+        int x = -1;
+        if (i < len) {
+            x = std::stoi(&str[i]);
+        }
+        return x;
+    }
+
+    void analyze() noexcept {
+        LOG("Number of ballots: "<<num_votes_);
+        analyzeApproval();
+        analyzeBordaCount();
+        analyzeBucklin();
+        analyzeCondorcet();
+        analyzeGuthrie();
+        analyzeInstantRunoff();
+        analyzeScore();
+        reportWinners();
+    }
+
+    void analyzeApproval() noexcept {
+        LOG("Results by Approval Voting:");
+        int winner = -1;
+        int max_count = -1;
+        for (int method = 0; method < kNumMethods; ++method) {
+            int count = approval_counts_[method];
+            LOG("  "<<method_names_[method]<<": "<<count);
+            if (max_count < count) {
+                max_count = count;
+                winner = method;
+            }
+        }
+        LOG("  Winner: "<<method_names_[winner]);
+        winners_[kApproval] = winner;
+    }
+
+    void analyzeBordaCount() noexcept {
+        LOG("Results by Borda Count:");
+        int winner = -1;
+        int max_count = -1;
+        for (int method = 0; method < kNumMethods; ++method) {
+            int count = borda_counts_[method];
+            LOG("  "<<method_names_[method]<<": "<<count);
+            if (max_count < count) {
+                max_count = count;
+                winner = method;
+            }
+        }
+        LOG("  Winner: "<<method_names_[winner]);
+        winners_[kBordaCount] = winner;
+    }
+
+    void analyzeBucklin() noexcept {
+        LOG("Results by Bucklin Voting:");
+        int winner = -1;
+        int leader = -1;
+        for (int round = 0; round < kNumMethods; ++round) {
+            LOG("  Round["<<round+1<<"]:");
+            int max_count = -1;
+            for (int method = 0; method < kNumMethods; ++method) {
+                int count = bucklin_counts_[method][round];
+                LOG("    "<<method_names_[method]<<": "<<count);
+                if (max_count < count) {
+                    max_count = count;
+                    leader = method;
+                }
+            }
+            if (max_count >= majority_) {
+                winner = leader;
+                break;
+            }
+        }
+        if (winner < 0) {
+            winner = leader;
+        }
+        LOG("  Winner: "<<method_names_[winner]);
+        winners_[kBucklin] = winner;
+    }
+
+    void analyzeCondorcet() noexcept {
+        LOG("Results by Condorcet:");
+
+        int wins[kNumMethods];
+        for (int method = 0; method < kNumMethods; ++method) {
+            wins[method] = 0;
+        }
+
+        for (int method_a = 0; method_a < kNumMethods; ++method_a) {
+            for (int method_b = method_a + 1; method_b < kNumMethods; ++method_b) {
+                for (auto &&ballot : condorcet_ballots_) {
+                    int rank_a = ballot.rankings_[method_a];
+                    int rank_b = ballot.rankings_[method_b];
+                    if (rank_a > rank_b) {
+                        ++wins[rank_a];
+                    } else if (rank_b > rank_a) {
+                        ++wins[rank_b];
+                    }
+                }
+            }
+        }
+
+        static constexpr int kNeededWins = (kNumMethods + 1) / 2;
+        int winner = -1;
+        for (int method = 0; method < kNumMethods; ++method) {
+            int w = wins[method];
+            if (w >= kNeededWins) {
+                winner = method;
+            }
+            LOG("  "<<method_names_[method]<<": "<<w);
+        }
+
+        if (winner >= 0) {
+            LOG("  Winner: "<<method_names_[winner]);
+        } else {
+            LOG("  Winner: cycle");
+        }
+        winners_[kCondorcet] = winner;
+    }
+
+    void analyzeGuthrie() noexcept {
+        LOG("Results by Guthrie Voting:");
+        int winner = -1;
+        int max_count = -1;
+        for (int method = 0; method < kNumMethods; ++method) {
+            int count = guthrie_counts_[method];
+            LOG("  "<<method_names_[method]<<": "<<count);
+            if (max_count < count) {
+                max_count = count;
+                winner = method;
+            }
+        }
+        if (max_count >= majority_) {
+            LOG("  Winner: "<<method_names_[winner]);
+        } else {
+            winner = -1;
+            LOG("  Winner: by negotiation");
+        }
+        winners_[kGuthrie] = winner;
+    }
+
+    void analyzeInstantRunoff() noexcept {
+        LOG("Results by Instant Runoff Voting:");
+        int winner = -1;
+        for (int round = 1; round <= kNumRounds; ++round) {
+            LOG("  Round["<<round<<"]:");
+
+            /** count first place votes. **/
+            int counts[kNumMethods];
+            for (int method = 0; method < kNumMethods; ++method) {
+                counts[method] = 0;
+            }
+            for (auto &&ballot : instant_ballots_) {
+                for (int method = 0; method < kNumMethods; ++method) {
+                    int rank = ballot.rankings_[method];
+                    if (rank == 1) {
+                        ++counts[method];
+                        break;
+                    }
+                }
+            }
+
+            /** find the method with the mosts and fewest first place votes. **/
+            winner = -1;
+            int loser = -1;
+            int max_count = -1;
+            int min_count = 1000;
+            for (int method = 0; method < kNumMethods; ++method) {
+                int count = counts[method];
+                LOG("    "<<method_names_[method]<<": "<<count);
+                if (max_count < count) {
+                    max_count = count;
+                    winner = method;
+                }
+                if (min_count > count) {
+                    min_count = count;
+                    loser = method;
+                }
+            }
+
+            /** the winner must have a majority. **/
+            if (max_count >= majority_) {
+                break;
+            }
+
+            /** remove the loser from the ballots. **/
+            for (auto &&ballot : instant_ballots_) {
+                int loser_rank = ballot.rankings_[loser];
+
+                /** increase the rank of all other lower ranked methods. **/
+                for (int method = 0; method < kNumMethods; ++method) {
+                    int rank = ballot.rankings_[method];
+                    if (rank > loser_rank) {
+                        --ballot.rankings_[method];
+                    }
+                }
+                /** eliminate the loser. **/
+                ballot.rankings_[loser] = kNumMethods;
+            }
+        }
+
+        LOG("  Winner: "<<method_names_[winner]);
+        winners_[kInstantRunoff] = winner;
+    }
+
+    void analyzeScore() noexcept {
+        LOG("Results by Score Voting:");
+        int winner = -1;
+        int max_total = -1;
+        for (int method = 0; method < kNumMethods; ++method) {
+            int total = score_totals_[method];
+            LOG("  "<<method_names_[method]<<": "<<total);
+            if (max_total < total) {
+                max_total = total;
+                winner = method;
+            }
+        }
+        LOG("  Winner: "<<method_names_[winner]);
+        winners_[kScore] = winner;
+    }
+
+    void reportWinners() noexcept {
+        LOG("Winners by Method:");
+        for (int i = 0; i < kNumMethods; ++i) {
+            int winner = winners_[i];
+            if (winner >= 0) {
+                LOG("  Method["<<method_names_[i]<<"]: "<<method_names_[winner]);
+            } else {
+                LOG("  Method["<<method_names_[i]<<"]: tbd");
+            }
+        }
     }
 };
 
