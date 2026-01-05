@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2012-2025 tim cotter. All rights reserved.
+Copyright (C) 2012-2026 tim cotter. All rights reserved.
 */
 
 /**
@@ -7,6 +7,7 @@ guthrie voting.
 **/
 
 #include "guthrie.h"
+#include "survey.h"
 
 #include <aggiornamento/aggiornamento.h>
 #include <aggiornamento/log.h>
@@ -19,8 +20,11 @@ int main(
 
     agm::log::init(AGM_TARGET_NAME ".log", false);
 
-    GuthrieVoting guthrie;
-    guthrie.run();
+    VotingSurvey survey;
+    survey.run();
+
+    /*GuthrieVoting guthrie;
+    guthrie.run();*/
 
     return 0;
 }

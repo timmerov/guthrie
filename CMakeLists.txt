@@ -58,6 +58,7 @@ set(INCS
 include_directories(${INCS})
 
 # add the libraries
-#set(LIBS
-#)
-#target_link_libraries(${THIS_TARGET_NAME} ${LIBS})
+set(LIBS
+    curl
+)
+target_link_libraries(${THIS_TARGET_NAME} ${LIBS})
