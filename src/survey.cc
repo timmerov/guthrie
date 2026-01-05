@@ -2,16 +2,29 @@
 Copyright (C) 2012-2025 tim cotter. All rights reserved.
 */
 
+#include <algorithm>
 #include <curl/curl.h>
-
-#include "survey.h"
+#include <iomanip>
+#include <sstream>
 
 #include <aggiornamento/aggiornamento.h>
 #include <aggiornamento/log.h>
 
+#include "survey.h"
+
 namespace {
 
-static constexpr char kVotingSurveyUrl[] = "https://docs.google.com/spreadsheets/d/11CS8R4pbYFDQcHaXjGxAquIuVWzb8vjciY_fS-Tz_Rk/export?format=csv&gid=2041703740";
+static constexpr char kVotingSurveyUrl[] = "https://docs.google.com/spreadsheets/d/11CS8R4pbYFDQcHaXjGxAquIuVWzb8vjciY_fS-Tz_Rk/export?format=tsv&gid=2041703740";
+
+enum class Method {
+    kApproval,
+    kBordaCount,
+    kBucklin,
+    kCondorcet,
+    kGuthrie,
+    kInstantRunoff,
+    kScore
+};
 
 class VotingSurveyImpl {
 public:
@@ -23,7 +36,72 @@ public:
     void run() noexcept {
         loadSurveyDataFromGoogleSheet();
 
-        LOG("csv="<<buffer_);
+        std::stringstream ss(std::move(buffer_));
+        buffer_.clear();
+
+        /** skip the first line. **/
+        std::string line;
+        std::getline(ss, line);
+
+        /** read the rows. **/
+        int row = 0;
+        while (std::getline(ss, line)) {
+            LOG("row["<<row<<"]:");
+            ++row;
+
+            /** replace spaces with underscores. **/
+            std::replace(line.begin(), line.end(), ' ', '_');
+
+            /** replace empty cells with underscores. **/
+            for(;;) {
+                auto found = line.find("\t\t");
+                if (found == std::string::npos) {
+                    break;
+                }
+                line.replace(found, 2, "\t_\t");
+            }
+
+            /** read cells. **/
+            std::stringstream cells(line);
+            std::string s0;
+            std::string s1;
+            std::string s2;
+            std::string s3;
+            std::string s4;
+            std::string s5;
+            std::string s6;
+
+            /** date/time **/
+            cells >> s0;
+
+            /** approval **/
+            cells >> s0;
+            LOG("Approval: "<<s0);
+
+            /** borda count **/
+            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
+            LOG("Borda Count: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
+
+            /** bucklin **/
+            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
+            LOG("Bucklin: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
+
+            /** condorcet **/
+            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
+            LOG("Condorcet: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
+
+            /** guthrie **/
+            cells >> s0;
+            LOG("Guthrie: "<<s0);
+
+            /** instant runoff **/
+            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
+            LOG("Instant Runoff: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
+
+            /** score **/
+            cells >> s0 >> s1 >> s2 >> s3 >> s4 >> s5 >> s6;
+            LOG("Score: "<<s0<<" "<<s1<<" "<<s2<<" "<<s3<<" "<<s4<<" "<<s5<<" "<<s6<<" ");
+        }
     }
 
     void loadSurveyDataFromGoogleSheet() noexcept {
