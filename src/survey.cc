@@ -201,7 +201,11 @@ public:
             tallyScore();
         }
 
-        majority_ = (num_votes_ + 1) / 2;
+        /**
+        half of the votes (round down) plus one.
+        works for even and odd numbers of votes.
+        **/
+        majority_ = num_votes_ / 2 + 1;
     }
 
     void tallyApproval() noexcept {
@@ -467,6 +471,12 @@ public:
 
     void analyzeInstantRunoff() noexcept {
         LOG("Results by Instant Runoff Voting (votes):");
+
+        bool elligible[kNumMethods];
+        for (int i = 0; i < kNumMethods; ++i) {
+            elligible[i] = true;
+        }
+
         int winner = -1;
         for (int round = 1; round <= kNumRounds; ++round) {
             LOG("  Round["<<round<<"]:");
@@ -493,14 +503,18 @@ public:
             int min_count = 1000;
             for (int method = 0; method < kNumMethods; ++method) {
                 int count = counts[method];
-                LOG("    "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
+                if (elligible[method]) {
+                    LOG("    "<<std::left<<std::setw(longest_name_)<<method_names_[method]<<": "<<count);
+                }
                 if (max_count < count) {
                     max_count = count;
                     winner = method;
                 }
-                if (min_count > count) {
-                    min_count = count;
-                    loser = method;
+                if (elligible[method]) {
+                    if (min_count > count) {
+                        min_count = count;
+                        loser = method;
+                    }
                 }
             }
 
@@ -510,6 +524,7 @@ public:
             }
 
             /** remove the loser from the ballots. **/
+            LOG("    Loser: "<<method_names_[loser]);
             for (auto &&ballot : instant_ballots_) {
                 int loser_rank = ballot.rankings_[loser];
 
@@ -522,6 +537,7 @@ public:
                 }
                 /** eliminate the loser. **/
                 ballot.rankings_[loser] = kNumMethods;
+                elligible[loser] = false;
             }
         }
 
