@@ -79,7 +79,7 @@ A casts 35 votes for A.
 B casts 30 votes for B.
 C casts 25 votes for B.
 D casts 10 votes for B.
-totals: A=35, B=65, C=35, D=0.
+totals: A=35, B=65, C=0, D=0.
 B has a majority.
 B wins the election.
 
@@ -95,8 +95,8 @@ ie there's no incentive for either the voters or the candidates to change their 
 ie to vote strategically instead of honestly.
 an exception would be when a candidate's preference isn't honest.
 example: A=40 B=35 C=25 where C for whatever reason prefers A>B.
-then A+C eliminate B and A wins in round 2 with votes from B.
-but if enough  voters can see this coming before the election,
+then A+C eliminates B and A wins in round 2 with votes from B.
+but if enough voters can see this coming before the election,
 they will also vote dishonestly for their second choice, B.
 giving B a majority win in round 1.
 so C's strategy for getting a victory for A would be to lie to their constituents.
@@ -155,8 +155,8 @@ average the winner(s), best, and random candidate utilities over all trials.
 use the average utilities to compute the satisfaction.
 instead of averaging the satisfactions of each trial.
 
-we do not need check independence when multiple candidates drop out.
-guthrie does not have satisfy independence from irrelevant alternatives.
+we do not need to check independence when multiple candidates drop out.
+guthrie does not have to satisfy independence from irrelevant alternatives.
 the occurance is rare.
 but is an opportunity for voters to vote strategically.
 specifically B wins.
@@ -170,7 +170,7 @@ we have a nash equilibrium.
 "proof":
 a majority coalition can efficiently eliminate all candidates not in the coalition.
 thereby ensuring one of the coalition members wins.
-in order to forma a majority coalition of the left (close to position 1)...
+in order to form a majority coalition of the left (close to position 0)...
 the guthrie winner must be included.
 otherwise they don't have a majority of the voters.
 same for the right.
@@ -194,7 +194,7 @@ cause voters are far more radical than the candidates.
 looks like this paper:
 https://voting-in-the-abstract.medium.com/voter-satisfaction-efficiency-many-many-results-ad66ffa87c9e
 scales the candidate standard deviation from 5% to 100% of the voter standard deviation.
-i think we can just move the candidates position centerward by same percentages.
+i think we can just move the candidates position centerward by some percentage.
 realistic numbers range from 34% to 94%.
 with maybe a reasonable guess around 75%.
 the apparent effect of dispersion is to amplify the difference between electoral methods.
@@ -220,6 +220,9 @@ average utilities then calculate satisfactions instead of vice versa.
 two round plurality - top 2 pluralities go head to head.
 two round approval - top 2 vote getters go head to head.
 coombs' method.
+star - score candidates 0 to 5.
+the winner has one of the top two highest total scores and...
+is scored higher than the the other finalist on more ballots.
 
 things in progress:
 
@@ -235,9 +238,6 @@ an election with high spread contributes more.
 voting systems to consider adding:
 
 majority judgement voting - winner has the largest median utility.
-star - score candidates 0 to 5.
-the winner has one of the top two highest total scores and...
-is scored higher than the the other finalist on more ballots.
 ranked robin - condorcet but voters can give candidates equal ranking.
 instant pairwise elimination ipe - eliminate the condorcet loser each round.
 with tie breaker rules. https://electowiki.org/wiki/Instant_Pairwise_Elimination
@@ -502,6 +502,7 @@ TemplateSpecializaationOfMemberFunctionOutsideClass(Guthrie);
 TemplateSpecializaationOfMemberFunctionOutsideClass(ApprovalRunoff);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Range);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Condorcet);
+TemplateSpecializaationOfMemberFunctionOutsideClass(Star);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Borda);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Approval);
 TemplateSpecializaationOfMemberFunctionOutsideClass(Coombs);
@@ -548,6 +549,7 @@ public:
     ElectoralMethod<ApprovalRunoff> approval_runoff_;
     ElectoralMethod<Range> range_;
     ElectoralMethod<Condorcet> condorcet_;
+    ElectoralMethod<Star> star_;
     ElectoralMethod<Borda> borda_;
     ElectoralMethod<Approval> approval_;
     ElectoralMethod<Coombs> coombs_;
@@ -1313,6 +1315,7 @@ public:
         approval_runoff_.find_winner();
         range_.find_winner();
         condorcet_.find_winner();
+        star_.find_winner();
         borda_.find_winner();
         approval_.find_winner();
         coombs_.find_winner();
@@ -1392,6 +1395,8 @@ public:
         LOG("Range winner                : "<<candidates_[range_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, condorcet_.winner_);
         LOG("Condorcet winner            : "<<condorcet_winner_name<<" "<<result);
+        result = result_to_string(guthrie_.winner_, star_.winner_);
+        LOG("Star winner                 : "<<candidates_[star_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, borda_.winner_);
         LOG("Borda winner                : "<<candidates_[borda_.winner_].name_<<" "<<result);
         result = result_to_string(guthrie_.winner_, approval_.winner_);
@@ -1486,7 +1491,7 @@ public:
         int max_wins = ncandidates_ - 1;
         for (int i = 0; i < ncandidates_; ++i) {
             if (wins[i] == max_wins) {
-                LOG("Candidate "<<i<<" is undefeated.");
+                LOG("Candidate "<<candidates_[i].name_<<" is undefeated.");
                 return false;
             }
         }
@@ -1591,6 +1596,7 @@ public:
         double average_approval_runoff = approval_runoff_.total_utility_ / denom;
         double average_range = range_.total_utility_ / denom;
         double average_condorcet = condorcet_.total_utility_ / denom;
+        double average_star = star_.total_utility_ / denom;
         double average_borda = borda_.total_utility_ / denom;
         double average_approval = approval_.total_utility_ / denom;
         double average_coombs = coombs_.total_utility_ / denom;
@@ -1604,6 +1610,7 @@ public:
         double satisfaction_approval_runoff = calculate_satisfaction(average_approval_runoff, accumulated_);
         double satisfaction_range = calculate_satisfaction(average_range, accumulated_);
         double satisfaction_condorcet = calculate_satisfaction(average_condorcet, accumulated_);
+        double satisfaction_star = calculate_satisfaction(average_star, accumulated_);
         double satisfaction_borda = calculate_satisfaction(average_borda, accumulated_);
         double satisfaction_approval = calculate_satisfaction(average_approval, accumulated_);
         double satisfaction_coombs = calculate_satisfaction(average_coombs, accumulated_);
@@ -1623,6 +1630,7 @@ public:
         double is_range = 100.0 * double(range_.is_winner_) / denom;
         double is_condorcet_min = 100.0 * double(condorcet_.is_winner_) / denom;
         double is_condorcet_max = 100.0 * double(condorcet_.is_winner_) / non_cycle_trials;
+        double is_star = 100.0 * double(star_.is_winner_) / denom;
         double is_borda = 100.0 * double(borda_.is_winner_) / denom;
         double is_approval = 100.0 * double(approval_.is_winner_) / denom;
         double is_coombs = 100.0 * double(coombs_.is_winner_) / denom;
@@ -1648,6 +1656,7 @@ public:
         LOG(" approval runoff              : "<<satisfaction_approval_runoff);
         LOG(" range                        : "<<satisfaction_range);
         LOG(" Condorcet (winner exists)    : "<<satisfaction_condorcet<<" ("<<satisfaction_ordering<<")");
+        LOG(" star                         : "<<satisfaction_star);
         LOG(" Borda                        : "<<satisfaction_borda);
         LOG(" approval                     : "<<satisfaction_approval);
         LOG(" Coombs                       : "<<satisfaction_coombs);
@@ -1660,6 +1669,7 @@ public:
         LOG(" approval runoff              : "<<is_approval_runoff<<"%");
         LOG(" range                        : "<<is_range<<"%");
         LOG(" Condorcet (winner exists)    : "<<is_condorcet_min<<"% ("<<is_condorcet_max<<"%)");
+        LOG(" star                         : "<<is_star<<"%");
         LOG(" Borda                        : "<<is_borda<<"%");
         LOG(" approval                     : "<<is_approval<<"%");
         LOG(" Coombs                       : "<<is_coombs<<"%");
@@ -2092,6 +2102,118 @@ template<> void ElectoralMethod<Condorcet>::find_winner(
 
     /** return results. **/
     g_impl->condorcet_loser_ = loser;
+}
+
+/**
+find the star winner.
+assign a score from 0 to 5 based on utilities for each block.
+**/
+template<> void ElectoralMethod<Star>::find_winner(
+    bool /*quiet*/
+) noexcept {
+    int ncandidates = g_impl->ncandidates_;
+    auto& candidates = g_impl->candidates_;
+    auto& bloc_map = g_impl->bloc_map_;
+
+    /** initialize rating for each candidate. **/
+    std::vector<int> ratings;
+    ratings.resize(ncandidates);
+    for (int i = 0; i < ncandidates; ++i) {
+        ratings[i] = 0;
+    }
+
+    /** for each voter bloc. **/
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+        double first = bloc.utilities_[0];
+        double last = bloc.utilities_[ncandidates-1];
+        double denom = first - last;
+
+        for (int i = 0; i < ncandidates; ++i) {
+            double utility = bloc.utilities_[i];
+            double rating = (utility - last) / denom;
+            int score = std::floor(6.0 * rating);
+            score = std::clamp(score, 0, 5);
+            int which = rankings[i];
+            ratings[which] += score * bloc.size_;
+        }
+    }
+
+    /** find the largest score. **/
+    int a = -1;
+    int max = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        int rating = ratings[i];
+        if (max < rating ) {
+            a = i;
+            max = rating;
+        }
+    }
+
+    /** find the second largest score. **/
+    int b = -1;
+    max = -1;
+    for (int i = 0; i < ncandidates; ++i) {
+        if (i == a) {
+            continue;
+        }
+        int rating = ratings[i];
+        if (max < rating ) {
+            b = i;
+            max = rating;
+        }
+    }
+
+    /** find which is ranked higher most often. **/
+    int counta = 0;
+    int countb = 0;
+    for (auto&& it : bloc_map) {
+        auto& rankings = it.first;
+        auto& bloc = it.second;
+        double first = bloc.utilities_[0];
+        double last = bloc.utilities_[ncandidates-1];
+        double denom = first - last;
+
+        int scorea = -1;
+        int scoreb = -1;
+        for (int i = 0; i < ncandidates; ++i) {
+            double utility = 0.0;
+            double rating = 0.0;
+            int which = rankings[i];
+            if (which == a) {
+                utility = bloc.utilities_[i];
+                rating = (utility - last) / denom;
+                scorea = std::floor(6.0 * rating);
+                scorea = std::clamp(scorea, 0, 5);
+            } else if (which == b) {
+                utility = bloc.utilities_[i];
+                rating = (utility - last) / denom;
+                scoreb = std::floor(6.0 * rating);
+                scoreb = std::clamp(scoreb, 0, 5);
+            }
+        }
+
+        if (scorea > scoreb) {
+            counta += bloc.size_;
+        } else if (scoreb > scorea) {
+            countb += bloc.size_;
+        }
+    }
+    if (counta >= countb) {
+        winner_ = a;
+    } else {
+        winner_ = b;
+    }
+
+    /** accumulate the utility. **/
+    auto& candidate = candidates[winner_];
+    total_utility_ += candidate.utility_;
+
+    /** accumulate correlations. **/
+    if (winner_ == g_impl->guthrie_.winner_) {
+        ++is_winner_;
+    }
 }
 
 /**
