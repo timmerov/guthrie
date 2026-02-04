@@ -157,7 +157,6 @@ public:
         /** read the rows. **/
         int row = 0;
         while (std::getline(sheet_, line_)) {
-            //LOG("row["<<row<<"]:");
             ++row;
             ++num_votes_;
 
@@ -172,6 +171,7 @@ public:
                 }
                 line_.replace(found, 2, "\t_\t");
             }
+            LOG("row["<<row<<"]: "<<line_);
 
             /** read cells. **/
             cells_ = std::stringstream(line_);

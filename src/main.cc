@@ -7,7 +7,7 @@ guthrie voting.
 **/
 
 #include "guthrie.h"
-#include "survey.h"
+//#include "survey.h"
 
 #include <aggiornamento/aggiornamento.h>
 #include <aggiornamento/log.h>
@@ -20,11 +20,11 @@ int main(
 
     agm::log::init(AGM_TARGET_NAME ".log", false);
 
-    VotingSurvey survey;
-    survey.run();
+    /*VotingSurvey survey;
+    survey.run();*/
 
-    /*GuthrieVoting guthrie;
-    guthrie.run();*/
+    GuthrieVoting guthrie;
+    guthrie.run();
 
     return 0;
 }
