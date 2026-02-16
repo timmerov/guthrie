@@ -30,3 +30,6 @@ set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "" FORCE)
 
 # include platform specific configs.
 include("${THIS_CMAKE_DIR}/platform/${PLATFORM_FILE}.txt")
+
+# enable link-time optimizations in all targets
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)

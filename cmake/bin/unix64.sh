@@ -27,7 +27,7 @@ mkdir -p $BUILD_DIR-release
 pushd $BUILD_DIR-release
 echo Build is unix64 release.
 $CMAKE_EXE \
-        -G "Unix Makefiles" \
+    -G "Unix Makefiles" \
 	-DCMAKE_BUILD_TYPE:STRING=Release \
 	$options \
 	..
